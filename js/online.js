@@ -185,7 +185,7 @@ board(){const b=ui.board,e=D.events.find(x=>x.id===ui.ev)||(b&&b.event);
   const ph=phase(e);
   const head=`<section class="intro"><p class="eyebrow">${T(e.tour).name}${e.test?' · test event':''}</p><h1>${esc(e.name)}</h1><p class="lede">${COURSES[e.ci].name}: ${COURSES[e.ci].blurb} Starts ${when(e.starts_at)}. Purse ${fmt$(e.purse)}.</p>${back}</section>`;
   if(ph==='open'){const gs=mine().filter(g=>g.tour===e.tour);
-    return head+`<section class="sec"><h2>Entries close in ${until(new Date(deadline(e)).toISOString())}</h2>${gs.length?`<div class="shop">${gs.map(g=>evItem(e,g,true)).join('')}</div>`:'<p class="muted">None of your golfers play on this tour.</p>'}${flash()}<p class="muted small">The field is set when entries close: managers' golfers first, then the tour regulars, ${FIELD} in all.</p></section>`;}
+    return head+`<section class="sec"><h2>Entries close in ${until(new Date(deadline(e)).toISOString())}</h2>${gs.length?`<div class="shop">${gs.map(g=>evItem(e,g,true)).join('')}</div>`:'<p class="muted">None of your golfers play on this tour.</p>'}${flash()}</section>${previewHTML(e)}`;}
   if(!b||!b.players)return head+'<section class="sec"><p class="muted">Loading the board…</p></section>';
   if(!b.players.length)return head+`<section class="sec"><p class="muted">Setting the field. The first tee time is ${until(e.starts_at)} away.</p></section>`;
   return head+boardHTML(b,e)+watchHTML(b,e);},
@@ -247,6 +247,14 @@ function boardHTML(b,e){const rows=boardRows(b,e),fin=e.status==='final',cutR=b.
  </tbody></table></div><div class="row"><span class="muted small">${live?'Updates every few seconds.':''}</span><button class="btn sm" data-act="fullBoard">${ui.full?'Show fewer':'Show all '+rows.length}</button></div></section>`;}
 function watchHTML(b,e){if(!ui.watch)return '';const p=b.players.find(x=>x.id===ui.watch);if(!p)return '';const f=(ui.feed||[]).slice().reverse().slice(0,18),pars=COURSES[e.ci].holes.map(h=>h.par);
   return `<section class="sec"><h2>Following ${esc(p.name)}</h2><div class="feed">${f.length?f.map((h,i)=>{const sc=h.shots.length&&h.shots.filter(s=>s.k!=='drop').length,d=sc-pars[h.hole];return `<p class="${i===0?'now':''}"><b>R${h.round+1} hole ${h.hole+1}</b> (par ${pars[h.hole]}): ${h.shots.map(s=>esc(s.text)).join(' ')} <span class="tag">${d===0?'Par':d===-1?'Birdie':d===-2?'Eagle':d===1?'Bogey':d===2?'Double':d<0?d:'+'+d}</span></p>`;}).join(''):'<p class="muted">He hasn’t teed off yet.</p>'}</div></section>`;}
+async function loadPreview(e){
+  const [gs,en]=await Promise.all([SB.from('golfers').select('id,name,country,college,stable,manager_id,sk,yr,enter_rule').eq('tour',e.tour).eq('retired',false).not('manager_id','is',null),SB.from('entries').select('golfer_id,status').eq('event_id',e.id)]);
+  const st=new Map((en.data||[]).map(x=>[x.golfer_id,x.status]));
+  const rows=(gs.data||[]).map(g=>{const s=st.get(g.id),auto=e.test||g.enter_rule==='all'||(g.enter_rule==='signature'&&['Signature','Finale'].includes(e.type));return{g,how:s==='in'?'Entered':s==='out'?null:auto?'Entered automatically':null};}).filter(r=>r.how);
+  rows.sort((a,b)=>ovr(b.g.sk)-ovr(a.g.sk));ui.preview={eid:e.id,rows};}
+function previewHTML(e){const P=ui.preview&&ui.preview.eid===e.id?ui.preview.rows:null;
+  return `<section class="sec"><h2>The field so far</h2>${!P?'<p class="muted">Loading…</p>':!P.length?'<p class="muted">No managers\u2019 golfers are in yet.</p>':`<div class="scroll"><table class="tbl"><thead><tr><th>Golfer</th><th>Stable</th><th class="num">Overall</th></tr></thead><tbody>${P.map(r=>`<tr class="${r.g.manager_id===D.user.id?'me':'now'}"><td>${flagHTML(r.g.country)}${esc(r.g.name)}${isCol(e.tour)?` <span class="muted small">${esc(r.g.college||'')}</span>`:''}${r.how==='Entered automatically'?' <span class="muted small">(auto)</span>':''}</td><td class="small">${esc(r.g.stable||'')}</td><td class="num">${Math.round(ovr(r.g.sk))}</td></tr>`).join('')}</tbody></table></div>`}
+  <p class="muted small">${P?`${P.length} golfer${P.length===1?'':'s'} from managers\u2019 stables so far. `:''}When entries close, tour regulars fill the rest of the ${FIELD} spots. Auto entries can still withdraw before then.</p></section>`;}
 async function loadStand(t){const {data}=await SB.from('standings').select('pts,wins,earn,golfers(name,country,stable,manager_id)').eq('tour',t).eq('season',D.world?D.world.season:1).order('pts',{ascending:false}).limit(200);ui.stand={t,rows:data||[]};if(ui.view==='standings')render();}
 
 /* ---------- render and events ---------- */
@@ -266,7 +274,7 @@ document.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');i
   if(a==='tour'){ui.tour=v;return render();}
   if(a==='stour'){ui.tour=v;ui.stand=null;return render();}
   if(a==='fullBoard'){ui.full=!ui.full;return render();}
-  if(a==='board'){ui.view='board';ui.ev=v;ui.board=null;ui.watch=null;ui.full=false;render();loadBoard().then(render);return;}
+  if(a==='board'){ui.view='board';ui.ev=v;ui.board=null;ui.watch=null;ui.full=false;ui.preview=null;render();const e=D.events.find(x=>x.id===v);if(e&&phase(e)==='open')loadPreview(e).then(render);loadBoard().then(render);return;}
   if(a==='watch'){ui.watch=v;loadWatch().then(render);return;}
   if(a==='join')return act('join',{name:val('stName')});
   if(a==='scout'){keepPros();return act('scout',{fresh:v==='fresh'});}
@@ -275,7 +283,7 @@ document.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');i
   if(a==='train'){ui.msg='';return act('train',{id:g.id,what:v});}
   if(a==='orders'){const f=val('oFocus');return act('orders',{id:g.id,orders:f?{focus:f,rest_below:+val('oRest'),report:true}:null},()=>{ui.msg='Standing orders saved.';});}
   if(a==='gear')return act('gear',{id:g.id,u:v});
-  if(a==='enter'||a==='withdraw')return act(a,{id:b.dataset.g,event:v});
+  if(a==='enter'||a==='withdraw')return act(a,{id:b.dataset.g,event:v},async()=>{const e=D.events.find(x=>x.id===v);if(e&&ui.view==='board')await loadPreview(e);});
   if(a==='list')return act('list',{id:g.id,ask:+val('askIn')});
   if(a==='unlist')return act('unlist',{id:g.id});
   if(a==='quicksell'){ui.confirm=null;return act('quicksell',{id:g.id},()=>{ui.sel=null;});}
@@ -330,5 +338,5 @@ if(SB){
   start();
   // keep things fresh: the world every 30 seconds, an open board every 5
   setInterval(()=>{if(D.user&&D.me&&!ui.busy&&!['auth','join','scout','admin','news'].includes(ui.view)&&!document.hidden){const a=document.activeElement;if(a&&/INPUT|SELECT/.test(a.tagName))return;load().then(render).catch(()=>{});}},30000);
-  setInterval(()=>{if(ui.view==='board'&&!document.hidden){const e=D.events.find(x=>x.id===ui.ev);if(e&&phase(e)==='open'){render();return;}loadBoard().then(()=>{const a=document.activeElement;if(!(a&&a.tagName==='SELECT'))render();});}},5000);
+  setInterval(()=>{if(ui.view==='board'&&!document.hidden){const e=D.events.find(x=>x.id===ui.ev);if(e&&phase(e)==='open'){(Date.now()%15000<5000?loadPreview(e):Promise.resolve()).then(()=>{const a=document.activeElement;if(!(a&&a.tagName==='SELECT'))render();});return;}loadBoard().then(()=>{const a=document.activeElement;if(!(a&&a.tagName==='SELECT'))render();});}},5000);
 }else document.getElementById('view').innerHTML='<p class="lede">Couldn’t load the game. Refresh to try again.</p>';
