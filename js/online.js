@@ -188,7 +188,7 @@ board(){const b=ui.board,e=D.events.find(x=>x.id===ui.ev)||(b&&b.event);
     return head+`<section class="sec"><h2>Entries close in ${until(new Date(deadline(e)).toISOString())}</h2>${gs.length?`<div class="shop">${gs.map(g=>evItem(e,g,true)).join('')}</div>`:'<p class="muted">None of your golfers play on this tour.</p>'}${flash()}</section>${previewHTML(e)}`;}
   if(!b||!b.players)return head+'<section class="sec"><p class="muted">Loading the board…</p></section>';
   if(!b.players.length)return head+`<section class="sec"><p class="muted">Setting the field. The first tee time is ${until(e.starts_at)} away.</p></section>`;
-  return head+boardHTML(b,e)+watchHTML(b,e);},
+  return head+watchHTML(b,e)+`<div id="boardBox">${boardHTML(b,e)}</div>`;},
 standings(){const tours=TORDER,t=ui.tour&&ui.tour!=='all'?ui.tour:(G()&&!G().retired?G().tour:'p1');ui.tour=t;
   const rows=ui.stand&&ui.stand.t===t?ui.stand.rows:null;if(!rows)loadStand(t);
   return `<section class="intro"><p class="eyebrow">Season ${D.world?D.world.season:1}</p><h1>Standings</h1><p class="lede">Points from finished events this season. At the end of the month the top ${Math.round(FIELD*.2)} on each pro tour go up and the bottom ${Math.round(FIELD*.2)} go down.</p></section>
@@ -230,7 +230,7 @@ function coachMine(g){const cr=g.cr;if(!cr)return '<section class="sec"><p class
   <p class="muted small">Rival managers book what's left of his day each night; a fee near what he's worth books best.</p></section>`;}
 
 /* ---------- the live board ---------- */
-async function loadBoard(){if(!ui.ev)return;const {data,error}=await SB.rpc('event_board',{eid:ui.ev});if(!error&&data){ui.board=data;if(ui.watch)await loadWatch();}}
+async function loadBoard(){if(!ui.ev)return;const {data,error}=await SB.rpc('event_board',{eid:ui.ev});if(!error&&data){ui.board=data;if(ui.watch){await loadWatch();syncAnim();}}}
 async function loadWatch(){const {data}=await SB.rpc('event_watch',{eid:ui.ev,gid:ui.watch});ui.feed=data||[];}
 function boardRows(b,e){const pars=COURSES[e.ci].holes.map(h=>h.par);
   return b.players.map(p=>{let tot=0,thru=0,rd=0,strokes=[];(p.scores||[]).forEach((r,i)=>{r.forEach((s,h)=>tot+=s-pars[h]);if(r.length){rd=i;thru=r.length;}strokes.push(r.reduce((a,c)=>a+c,0));});return{p,tot,thru,rd,strokes};});}
@@ -239,14 +239,13 @@ function boardHTML(b,e){const rows=boardRows(b,e),fin=e.status==='final',cutR=b.
   rows.sort((a,c)=>fin?((a.p.pos_n||999)-(c.p.pos_n||999)):((a.p.cut?1:0)-(c.p.cut?1:0)||a.tot-c.tot||c.thru-a.thru));
   let pos=0;rows.forEach((r,i)=>{if(fin){r.pos=r.p.pos;return;}if(i===0||r.tot!==rows[i-1].tot||r.p.cut!==rows[i-1].p.cut)pos=i+1;r.pos=r.p.cut?'MC':String(pos);});
   if(!fin){const act=rows.filter(r=>!r.p.cut),H=r=>(4-r.rd)*18-r.thru;const list=act.map(r=>({r:ratingFor(r.p,e.ci),cur:r.tot,H:Math.max(0,(3-r.rd)*18+(18-r.thru))}));const w=winProbs(list,300);act.forEach((r,i)=>r.odds=oddsLabel(w[i]));}
+  ui.posMap=new Map(rows.map(r=>[r.p.id,r.p.cut?'Missed cut':`${r.pos} at ${fmtPar(r.tot)}`]));
   const show=ui.full?rows:rows.filter((r,i)=>i<15||r.p.managed);
   const live=!fin&&phase(e)==='live';
   return `<section class="board"><div class="row"><h2>${fin?'Final':live?`Round ${R+1}, live`:'Waiting for the first tee shot'}</h2><span class="chip">${cutR&&!fin?'Cut made':''}</span></div>
  <div class="bscroll"><table><thead><tr><th class="num">Pos</th><th>Golfer</th>${fin?'<th class="num">Pts</th>':'<th class="num">Odds</th>'}<th class="num">Par</th><th class="num">${fin?'Total':'Thru'}</th></tr></thead><tbody>
  ${show.map((r,i)=>`${i>0&&rows.indexOf(r)-rows.indexOf(show[i-1])>1?'<tr class="gap"><td colspan="5">⋮</td></tr>':''}<tr class="${r.p.mine?'me':r.p.managed?'mine':''}"><td class="num">${r.pos||''}</td><td class="nm">${flagHTML(r.p.country)}${esc(r.p.name)}${r.p.managed?`<small class="sch">${esc(r.p.stable||'')}</small>`:isCol(e.tour)?`<small class="sch">${esc(r.p.college||'')}</small>`:''}${fin&&r.p.pay?`<small class="sch">${fmt$(r.p.pay)}</small>`:''}${r.p.managed?` <button class="btn xs" data-act="watch" data-v="${r.p.id}">Watch</button>`:''}</td>${fin?`<td class="num">${r.p.pts?fmtPts(r.p.pts):''}</td>`:`<td class="num odds">${r.odds||''}</td>`}<td class="num${r.tot<0?' under':''}">${fmtPar(r.tot)}</td><td class="num">${fin?r.strokes.reduce((a,c)=>a+c,0)||'':r.thru===18&&r.rd===R?'F':r.thru||'–'}</td></tr>`).join('')}
  </tbody></table></div><div class="row"><span class="muted small">${live?'Updates every few seconds.':''}</span><button class="btn sm" data-act="fullBoard">${ui.full?'Show fewer':'Show all '+rows.length}</button></div></section>`;}
-function watchHTML(b,e){if(!ui.watch)return '';const p=b.players.find(x=>x.id===ui.watch);if(!p)return '';const f=(ui.feed||[]).slice().reverse().slice(0,18),pars=COURSES[e.ci].holes.map(h=>h.par);
-  return `<section class="sec"><h2>Following ${esc(p.name)}</h2><div class="feed">${f.length?f.map((h,i)=>{const sc=h.shots.length&&h.shots.filter(s=>s.k!=='drop').length,d=sc-pars[h.hole];return `<p class="${i===0?'now':''}"><b>R${h.round+1} hole ${h.hole+1}</b> (par ${pars[h.hole]}): ${h.shots.map(s=>esc(s.text)).join(' ')} <span class="tag">${d===0?'Par':d===-1?'Birdie':d===-2?'Eagle':d===1?'Bogey':d===2?'Double':d<0?d:'+'+d}</span></p>`;}).join(''):'<p class="muted">He hasn’t teed off yet.</p>'}</div></section>`;}
 async function loadPreview(e){
   const [gs,en]=await Promise.all([SB.from('golfers').select('id,name,country,college,stable,manager_id,sk,yr,enter_rule').eq('tour',e.tour).eq('retired',false).not('manager_id','is',null),SB.from('entries').select('golfer_id,status').eq('event_id',e.id)]);
   const st=new Map((en.data||[]).map(x=>[x.golfer_id,x.status]));
@@ -257,10 +256,119 @@ function previewHTML(e){const P=ui.preview&&ui.preview.eid===e.id?ui.preview.row
   <p class="muted small">${P?`${P.length} golfer${P.length===1?'':'s'} from managers\u2019 stables so far. `:''}When entries close, tour regulars fill the rest of the ${FIELD} spots. Auto entries can still withdraw before then.</p></section>`;}
 async function loadStand(t){const {data}=await SB.from('standings').select('pts,wins,earn,golfers(name,country,stable,manager_id)').eq('tour',t).eq('season',D.world?D.world.season:1).order('pts',{ascending:false}).limit(200);ui.stand={t,rows:data||[]};if(ui.view==='standings')render();}
 
+/* ---------- watching a golfer: the hole map, played on the clock ---------- */
+// The server reveals each hole when it's reached on the clock. Live, we animate each new hole as it arrives;
+// tapping a hole on the scorecard replays it.
+const SCORE_NAMES={'-3':'Albatross','-2':'Eagle','-1':'Birdie','0':'Par','1':'Bogey','2':'Double bogey','3':'Triple bogey'};
+const shotDur=s=>s.k==='full'?900+dist(s.from,s.to)*2.4:s.k==='chip'?800:s.k==='putt'?750:s.k==='drop'?350:500;
+const hkey=(r,h)=>r*18+h;
+function watchHTML(b,e){if(!ui.watch)return '';const p=b.players.find(x=>x.id===ui.watch);if(!p)return '';const A=ui.anim||{};
+  return `<section class="round" id="watchBox"><div>
+  <div class="holebar"><span><b id="hTitle">${esc(p.name)}</b></span><span id="hMeta"></span><span class="wind"><i id="windArrow">↑</i><span id="windTxt"></span></span></div>
+  <canvas id="cv" aria-label="Top-down map of the hole"></canvas>
+  <div class="ctrl"><button class="btn sm" data-act="wPause" id="pauseBtn">${A.paused?'Play':'Pause'}</button>${[1,2,4].map(s=>`<button class="btn sm${(A.speed||1)===s?' on':''}" data-act="wSpeed" data-v="${s}">${s}×</button>`).join('')}<span class="sp"></span><button class="btn sm${A.live!==false?' on':''}" data-act="wLive">Live</button><button class="btn sm" data-act="wStop">Close</button></div>
+ </div><div>
+  <div class="status"><span class="lab">${flagHTML(p.country)}${esc(p.name)}</span><span class="tag" id="posTag"></span><span class="tag" id="moodTag"></span><span id="runTag"></span></div>
+  <div class="feed" id="feed" aria-live="polite"></div>
+  <div id="wcard"></div>
+  <p class="muted small">Holes appear as he plays them on the clock, about one every ${Math.round(S().round_min*60/18)} seconds. Tap a score to replay that hole.</p>
+ </div></section>`;}
+function watchScores(){const b=ui.board,p=b&&b.players.find(x=>x.id===ui.watch);return p?p.scores||[]:[];}
+function syncAnim(){
+  const F=(ui.feed||[]).slice().sort((a,b)=>hkey(a.round,a.hole)-hkey(b.round,b.hole));
+  let A=ui.anim;
+  if(!A||A.gid!==ui.watch){A=ui.anim={gid:ui.watch,speed:1,paused:false,live:true,cur:null,phase:'idle',feed:[],trail:[],cam:null,cardR:null};
+    const last=F[F.length-1];if(last)beginHole(last,true);else{A.feed=[{text:'He hasn’t teed off yet. His first hole appears here as he plays it.',cls:''}];}}
+  else if(A.live&&A.phase==='idle'&&A.cur){const nx=F.find(x=>hkey(x.round,x.hole)>hkey(A.cur.round,A.cur.hole));if(nx)beginHole(nx);}
+  else if(A.live&&!A.cur&&F.length)beginHole(F[F.length-1],true);
+}
+function beginHole(x,first){const A=ui.anim,e=D.events.find(q=>q.id===ui.ev)||ui.board.event,h=COURSES[e.ci].holes[x.hole];
+  A.cur=x;A.h=h;A.si=0;A.t=0;A.w=0;A.trail=[];A.cam=null;A.phase=x.shots.length?'shot':'idle';A.cardR=x.round;
+  if(first)A.feed=[];
+  feedA(`Round ${x.round+1}, hole ${x.hole+1}. Par ${h.par}, ${h.len} yards.`,'big');paintHUD();paintSide();}
+function feedA(text,cls){const A=ui.anim;A.feed.push({text,cls:cls||''});if(A.feed.length>6)A.feed.shift();paintFeed();}
+function paintFeed(){const el=document.getElementById('feed');if(!el||!ui.anim)return;const f=ui.anim.feed;el.innerHTML=f.map((x,i)=>`<p class="${x.cls}${i===f.length-1?' now':''}">${esc(x.text)}</p>`).join('');}
+function paintHUD(){const A=ui.anim,x=A&&A.cur;if(!x||!document.getElementById('hTitle'))return;
+  document.getElementById('hTitle').textContent=`R${x.round+1} · Hole ${x.hole+1}`;document.getElementById('hMeta').textContent=`Par ${A.h.par}, ${A.h.len} yards`;
+  const w=ui.board&&ui.board.wind&&ui.board.wind[x.round];if(w){document.getElementById('windArrow').style.transform=`rotate(${w.dir}rad)`;document.getElementById('windTxt').textContent=`${Math.round(w.mph)} mph`;}}
+function wcardHTML(course,scores,R){const half=(a,label)=>{const hs=course.holes.slice(a,a+9),done=scores.length>=a+9,cur=ui.anim&&ui.anim.cur;
+    return `<div class="scroll"><table class="card"><tr><th>Hole</th>${hs.map((h,i)=>`<th>${a+i+1}</th>`).join('')}<th>${label}</th></tr>
+    <tr><td>Par</td>${hs.map(h=>`<td>${h.par}</td>`).join('')}<td>${sum(hs.map(h=>h.par))}</td></tr>
+    <tr><td>Score</td>${hs.map((h,i)=>{const s=scores[a+i];if(s===undefined)return'<td></td>';const d=s-h.par,on=cur&&cur.round===R&&cur.hole===a+i;return `<td class="${d<=-2?'eg':d===-1?'bd':d===1?'bg':d>=2?'db':''}" data-act="wHole" data-v="${R}-${a+i}" style="cursor:pointer${on?';outline:2px solid var(--flag)':''}"><s>${s}</s></td>`}).join('')}<td><b>${done?sum(scores.slice(a,a+9)):''}</b></td></tr></table></div>`};
+  return `<div class="cards">${half(0,'Out')}${half(9,'In')}</div>`;}
+function paintSide(){const A=ui.anim,el=document.getElementById('wcard');if(!A||!el)return;const e=D.events.find(q=>q.id===ui.ev)||ui.board.event,sc=watchScores();
+  const rounds=sc.map((r,i)=>i).filter(i=>sc[i]&&sc[i].length),R=A.cardR!==null&&A.cardR!==undefined?A.cardR:rounds[rounds.length-1]||0;
+  el.innerHTML=(rounds.length>1?`<div class="ctrl">${rounds.map(i=>`<button class="btn sm${i===R?' on':''}" data-act="wRound" data-v="${i}">R${i+1}: ${sum(sc[i])}</button>`).join('')}</div>`:'')+wcardHTML(COURSES[e.ci],sc[R]||[],R);
+  const pt=document.getElementById('posTag');if(pt)pt.textContent=ui.posMap&&ui.posMap.get(ui.watch)||'';
+  const x=A.cur,mt=document.getElementById('moodTag');if(mt)mt.textContent=x&&x.mood!==null&&x.mood!==undefined?moodWord(x.mood):'';
+  const rt=document.getElementById('runTag');if(rt)rt.innerHTML=x&&x.run>=2?'<span class="tag hot">Hot streak</span>':x&&x.run<=-2?'<span class="tag">Gone cold</span>':'';
+  const pb=document.getElementById('pauseBtn');if(pb)pb.textContent=A.paused?'Play':'Pause';
+  paintFeed();}
+function totThrough(r,h){const e=D.events.find(q=>q.id===ui.ev)||ui.board.event,pars=COURSES[e.ci].holes.map(x=>x.par),sc=watchScores();let t=0;
+  sc.forEach((rd,i)=>{if(i>r)return;rd.forEach((s,j)=>{if(i<r||j<=h)t+=s-pars[j];});});return t;}
+function endHoleA(){const A=ui.anim,x=A.cur,sc=watchScores(),s=sc[x.round]&&sc[x.round][x.hole];
+  if(s!==undefined){const d=s-A.h.par,t=totThrough(x.round,x.hole);feedA(`${SCORE_NAMES[d]||'A '+s}. He is ${t===0?'level par':fmtPar(t)}${x.round?' for the week':''} through ${x.hole+1}.`,'big');}
+  A.phase='post';A.w=0;paintSide();}
+function fitCanvas(){const cv=document.getElementById('cv');if(!cv)return;const dpr=Math.min(2,window.devicePixelRatio||1),r=cv.getBoundingClientRect();cv.width=Math.max(200,Math.round(r.width*dpr));cv.height=Math.max(250,Math.round(r.height*dpr));if(ui.anim)ui.anim.cam=null;}
+function camFor(A,green){const cv=document.getElementById('cv'),W=cv.width,H=cv.height,h=A.h;
+  if(green)return{x:h.green[0],y:h.green[1],s:Math.min(W,H)/110};const b=h.box;return{x:(b[0]+b[2])/2,y:(b[1]+b[3])/2,s:Math.min(W/(b[2]-b[0]),H/(b[3]-b[1]))};}
+let rafOn=false,lastTs=0;
+function startLoop(){fitCanvas();paintHUD();paintSide();if(!rafOn){rafOn=true;lastTs=performance.now();requestAnimationFrame(frame);}}
+function frame(ts){const A=ui.anim;if(ui.view!=='board'||!ui.watch||!A||!document.getElementById('cv')){rafOn=false;return;}
+  const dt=A.paused?0:Math.min(60,ts-lastTs)*A.speed;lastTs=ts;
+  if(A.cur&&A.cur.shots.length){
+    if(A.phase==='shot'){const sh=A.cur.shots[A.si];A.t+=dt/shotDur(sh);if(A.t>=1){A.t=1;feedA(sh.text);A.trail.push(sh);A.phase='wait';A.w=0;}}
+    else if(A.phase==='wait'){A.w+=dt;if(A.w>(A.cur.shots[A.si].holed?1000:750)){A.si++;if(A.si>=A.cur.shots.length){A.si=A.cur.shots.length-1;endHoleA();}else{A.phase='shot';A.t=0;}}}
+    else if(A.phase==='post'){A.w+=dt;if(A.w>1700){A.phase='idle';if(A.live)syncAnim();}}
+    drawMap(dt);
+  }
+  requestAnimationFrame(frame);}
+function drawMap(dt){
+  const A=ui.anim,cv=document.getElementById('cv');if(!cv||!A.h)return;const c=cv.getContext('2d'),W=cv.width,H=cv.height,h=A.h,shots=A.cur.shots,sh=shots[Math.min(A.si,shots.length-1)];
+  const moving=A.phase==='shot',e=moving?1-Math.pow(1-A.t,2.2):1,ball=moving?lerp(sh.from,sh.to,e):sh.to;
+  const tgt=camFor(A,dist(moving?sh.from:sh.to,h.green)<=52);
+  if(!A.cam)A.cam=tgt;else{const k=1-Math.exp(-(dt||16)/260);A.cam={x:A.cam.x+(tgt.x-A.cam.x)*k,y:A.cam.y+(tgt.y-A.cam.y)*k,s:A.cam.s+(tgt.s-A.cam.s)*k};}
+  const cam=A.cam,X=x=>(x-cam.x)*cam.s+W/2,Y=y=>H/2-(y-cam.y)*cam.s,Sc=cam.s;
+  c.fillStyle=MAP.tree;c.fillRect(0,0,W,H);
+  c.fillStyle=MAP.dot;for(const t of h.trees){c.beginPath();c.arc(X(t[0]),Y(t[1]),Math.max(1.5,t[2]*Sc),0,6.3);c.fill();}
+  c.lineCap='round';c.lineJoin='round';
+  const path=pts=>{c.beginPath();pts.forEach((p,i)=>i?c.lineTo(X(p[0]),Y(p[1])):c.moveTo(X(p[0]),Y(p[1])));};
+  c.strokeStyle=MAP.rough;c.lineWidth=2*h.tree*Sc;path(h.pts);c.stroke();
+  c.fillStyle=MAP.rough;c.beginPath();c.arc(X(h.green[0]),Y(h.green[1]),h.tree*Sc,0,6.3);c.fill();
+  const fp=[pointAt(h,h.fs0).p];for(let i=1;i<h.pts.length-1;i++)if(h.cum[i]>h.fs0&&h.cum[i]<h.fs1)fp.push(h.pts[i]);fp.push(pointAt(h,h.fs1).p);
+  c.strokeStyle=MAP.fair;c.lineWidth=2*h.fw*Sc;path(fp);c.stroke();
+  c.fillStyle=MAP.tee;c.fillRect(X(-5),Y(4),10*Sc,8*Sc);
+  c.fillStyle=MAP.water;for(const w of h.water){c.beginPath();c.ellipse(X(w.x),Y(w.y),w.rx*Sc,w.ry*Sc,w.rot,0,6.3);c.fill();}
+  c.fillStyle=MAP.fringe;c.beginPath();c.arc(X(h.green[0]),Y(h.green[1]),(h.gr+3)*Sc,0,6.3);c.fill();
+  c.fillStyle=MAP.green;c.beginPath();c.arc(X(h.green[0]),Y(h.green[1]),h.gr*Sc,0,6.3);c.fill();
+  c.fillStyle=MAP.sand;for(const b of h.sand){c.beginPath();c.arc(X(b.x),Y(b.y),b.r*Sc,0,6.3);c.fill();}
+  const px=X(h.pin[0]),py=Y(h.pin[1]),u=Math.max(W/55,5);
+  const holed=!!sh.holed,sunk=holed&&!moving,hw=sunk?(A.phase==='wait'?A.w/1000:1):0;
+  c.fillStyle='#10201a';c.beginPath();c.arc(px,py,Math.max(2.5,.45*Sc),0,6.3);c.fill();
+  if(sunk&&hw<1){c.strokeStyle=`rgba(255,255,255,${1-hw})`;c.lineWidth=Math.max(2,u*.22);c.beginPath();c.arc(px,py,u*(.6+hw*3.2),0,6.3);c.stroke();
+    c.strokeStyle=`rgba(227,180,32,${1-hw})`;c.beginPath();c.arc(px,py,u*(.3+hw*1.8),0,6.3);c.stroke();}
+  c.strokeStyle='#10201a';c.lineWidth=Math.max(1.5,u*.14);c.beginPath();c.moveTo(px,py);c.lineTo(px,py-u*2.2);c.stroke();
+  c.fillStyle='#e3b420';c.beginPath();c.moveTo(px,py-u*2.2);c.lineTo(px+u*1.3,py-u*1.75);c.lineTo(px,py-u*1.3);c.fill();
+  c.lineWidth=Math.max(1.5,u*.16);c.strokeStyle='rgba(255,255,255,.6)';c.setLineDash([u*.6,u*.5]);
+  for(const s of A.trail){if(s.k==='drop'||s.k==='pick')continue;c.beginPath();c.moveTo(X(s.from[0]),Y(s.from[1]));c.lineTo(X(s.to[0]),Y(s.to[1]));c.stroke();}
+  if(moving&&sh.k!=='drop'){c.beginPath();c.moveTo(X(sh.from[0]),Y(sh.from[1]));c.lineTo(X(ball[0]),Y(ball[1]));c.stroke();}
+  c.setLineDash([]);
+  if(sunk){if(hw<1){c.fillStyle=`rgba(255,255,255,${Math.min(1,2.2*(1-hw))})`;c.font=`700 ${Math.round(u*1.5)}px 'Barlow Condensed','Arial Narrow',sans-serif`;c.textAlign='center';
+      c.strokeStyle=`rgba(16,32,26,${Math.min(1,2.2*(1-hw))})`;c.lineWidth=u*.3;const ty=Math.max(u*2,py-u*3.4-hw*u);c.strokeText('IN THE HOLE',px,ty);c.fillText('IN THE HOLE',px,ty);}
+    return;}
+  const air=moving&&sh.k!=='putt'&&sh.k!=='drop'?Math.sin(Math.PI*A.t):0,lift=air*Math.min(H*.09,dist(sh.from,sh.to)*Sc*.16);
+  const drop=holed&&A.t>.88?Math.max(0,1-(A.t-.88)/.12):1,br=u*.42*(1+air*.7)*drop;
+  const bx=X(ball[0]),by=Y(ball[1]);if(br<=.2)return;
+  const mineG=D.golfers.find(g=>g.id===ui.watch);
+  c.fillStyle='rgba(0,0,0,.3)';c.beginPath();c.ellipse(bx+lift*.3,by+u*.12,br,br*.6,0,0,6.3);c.fill();
+  c.fillStyle='#fff';c.strokeStyle=mineG?COLORS[mineG.color]||'#222':'#222';c.lineWidth=Math.max(1.5,u*.16);c.beginPath();c.arc(bx,by-lift,br,0,6.3);c.fill();c.stroke();
+}
+
 /* ---------- render and events ---------- */
 function render(){nav();const v=document.getElementById('view');const f=V[ui.view]||V.loading;
   const a=document.activeElement,id=a&&a.id,val=a&&a.value;v.innerHTML=f();
   if(id){const n=document.getElementById(id);if(n&&n!==a){n.focus();if(n.type==='text'&&val!==undefined)n.value=val;}}
+  if(ui.view==='board'&&ui.watch&&document.getElementById('cv'))startLoop();
   const af=document.getElementById('authForm');if(af)af.onsubmit=ev=>{ev.preventDefault();submitAuth();};}
 function go(v){ui.view=v;ui.err='';ui.msg='';ui.confirm=null;if(v!=='board'){ui.ev=null;ui.board=null;ui.watch=null;}if(v==='standings')ui.stand=null;render();window.scrollTo(0,0);}
 const val=id=>{const n=document.getElementById(id);return n?n.value:'';};
@@ -275,7 +383,13 @@ document.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');i
   if(a==='stour'){ui.tour=v;ui.stand=null;return render();}
   if(a==='fullBoard'){ui.full=!ui.full;return render();}
   if(a==='board'){ui.view='board';ui.ev=v;ui.board=null;ui.watch=null;ui.full=false;ui.preview=null;render();const e=D.events.find(x=>x.id===v);if(e&&phase(e)==='open')loadPreview(e).then(render);loadBoard().then(render);return;}
-  if(a==='watch'){ui.watch=v;loadWatch().then(render);return;}
+  if(a==='watch'){ui.watch=v;ui.anim=null;loadWatch().then(()=>{syncAnim();render();window.scrollTo(0,0);});return;}
+  if(a==='wStop'){ui.watch=null;ui.anim=null;return render();}
+  if(a==='wPause'&&ui.anim){ui.anim.paused=!ui.anim.paused;return paintSide();}
+  if(a==='wSpeed'&&ui.anim){ui.anim.speed=+v;document.querySelectorAll('[data-act=wSpeed]').forEach(x=>x.classList.toggle('on',x.dataset.v===v));return;}
+  if(a==='wLive'&&ui.anim){ui.anim.live=true;const F=(ui.feed||[]).slice().sort((p,q)=>hkey(p.round,p.hole)-hkey(q.round,q.hole)),l=F[F.length-1];if(l)beginHole(l);b.classList.add('on');return;}
+  if(a==='wRound'&&ui.anim){ui.anim.cardR=+v;return paintSide();}
+  if(a==='wHole'&&ui.anim){const [r,h]=v.split('-').map(Number),x=(ui.feed||[]).find(q=>q.round===r&&q.hole===h);if(x){ui.anim.live=false;const lb=document.querySelector('[data-act=wLive]');if(lb)lb.classList.remove('on');beginHole(x);}return;}
   if(a==='join')return act('join',{name:val('stName')});
   if(a==='scout'){keepPros();return act('scout',{fresh:v==='fresh'});}
   if(a==='sign'){keepPros();const P=ui.pros;return act('sign',{name:P.name||'Tucker Hale',country:P.country,college:P.college,color:P.color},r=>{ui.sel=r.id;ui.pros={name:'',country:'US',college:'',color:0};ui.view='stable';});}
@@ -337,6 +451,7 @@ if(SB){
   });
   start();
   // keep things fresh: the world every 30 seconds, an open board every 5
-  setInterval(()=>{if(D.user&&D.me&&!ui.busy&&!['auth','join','scout','admin','news'].includes(ui.view)&&!document.hidden){const a=document.activeElement;if(a&&/INPUT|SELECT/.test(a.tagName))return;load().then(render).catch(()=>{});}},30000);
-  setInterval(()=>{if(ui.view==='board'&&!document.hidden){const e=D.events.find(x=>x.id===ui.ev);if(e&&phase(e)==='open'){(Date.now()%15000<5000?loadPreview(e):Promise.resolve()).then(()=>{const a=document.activeElement;if(!(a&&a.tagName==='SELECT'))render();});return;}loadBoard().then(()=>{const a=document.activeElement;if(!(a&&a.tagName==='SELECT'))render();});}},5000);
+  setInterval(()=>{if(D.user&&D.me&&!ui.busy&&!['auth','join','scout','admin','news'].includes(ui.view)&&!document.hidden){const a=document.activeElement;if(a&&/INPUT|SELECT/.test(a.tagName))return;load().then(()=>{if(ui.view!=='board')render();}).catch(()=>{});}},30000);
+  setInterval(()=>{if(ui.view==='board'&&!document.hidden){const e=D.events.find(x=>x.id===ui.ev);if(e&&phase(e)==='open'){(Date.now()%15000<5000?loadPreview(e):Promise.resolve()).then(()=>{const a=document.activeElement;if(!(a&&a.tagName==='SELECT'))render();});return;}loadBoard().then(()=>{const a=document.activeElement;if(a&&a.tagName==='SELECT')return;const bb=document.getElementById('boardBox'),e2=D.events.find(x=>x.id===ui.ev)||(ui.board&&ui.board.event);if(bb&&document.getElementById('watchBox')&&ui.board&&e2){bb.innerHTML=boardHTML(ui.board,e2);paintSide();}else render();});}},5000);
 }else document.getElementById('view').innerHTML='<p class="lede">Couldn’t load the game. Refresh to try again.</p>';
+window.addEventListener('resize',()=>{if(document.getElementById('cv'))fitCanvas();});
