@@ -28,6 +28,7 @@ Deno.serve(async (req) => {
     await simNext(s, done); // one round per call keeps each call well inside its time limit
     await finalizeDue(s, done);
     await dailyIfDue(s, done);
+    await fillCoachRatings(done);
   } catch (e) {
     console.error(e);
     return json({ error: String((e as Error)?.message || e), done }, 500);
@@ -49,7 +50,7 @@ function aiCoachRow(seed: number, L: number) {
       stable: RIVALS[Math.floor(r() * RIVALS.length)], retired: true, career: false, ret_age: 48 + Math.floor(r() * 24), best: peak, sessions: 0,
       stats: { ev: 0, cuts: 0, wins, top10: 0, earn: Math.round(E.TOURS[best].purse * (0.05 + r() * 0.4) * (4 + r() * 14) / 1000) * 1000, rounds: 0, par: 0, low: null },
       trophies: Array.from({ length: titles }, (_, i) => ({ s: i + 1, n: E.TOURS[best].name + ' season title', t: best, title: true })),
-      cr: { price, left: L, earn: Math.round(given * price * 0.8), given, own: 0, last: null },
+      cr: { price, left: L, earn: Math.round(given * price * 0.8), given, own: 0, last: null, o: co },
     }),
     sec: { ce: sk, peak: 1, agg: 0, co: raw },
   };
@@ -249,6 +250,16 @@ async function finalize(ev: any, s: any, done: string[]) {
   done.push(`final ${ev.name}: won by ${win?.g?.name}`);
 }
 
+// Coaching ratings are public once a golfer coaches; keep a copy on the coaching record.
+async function fillCoachRatings(done: string[]) {
+  const { data: cs } = await sb.from('golfers').select('id,sk,best,cr').eq('retired', true).not('cr', 'is', null).is('cr->o', null).limit(40);
+  if (!cs?.length) return;
+  const { data: sec } = await sb.from('golfer_secrets').select('golfer_id,co').in('golfer_id', cs.map((c: any) => c.id));
+  const m = new Map((sec || []).map((x: any) => [x.golfer_id, x.co]));
+  for (const c of cs) await sb.from('golfers').update({ cr: { ...c.cr, o: coachRatings(c, m.get(c.id) || rawCo(c.id)) } }).eq('id', c.id);
+  done.push(`coach ratings for ${cs.length}`);
+}
+
 // ---------- the daily refresh ----------
 async function dailyIfDue(s: any, done: string[]) {
   const { data: w } = await sb.from('world').select('*').single();
@@ -290,7 +301,7 @@ async function dailyRefresh(s: any, done: string[]) {
   const com = new Map((csec || []).map((x: any) => [x.golfer_id, x.co]));
   const L = s.lessons_per_day;
   for (const c of cs || []) {
-    const cr = { ...c.cr }, fair = fairPrice(coachRatings(c, com.get(c.id) || rawCo(c.id)), fameOf(c));
+    const o = coachRatings(c, com.get(c.id) || rawCo(c.id)), cr = { ...c.cr, o }, fair = fairPrice(o, fameOf(c));
     if (c.manager_id) {
       const n = binom(Math.max(0, cr.left), pBook(cr.price / fair)), inc = n * cr.price;
       if (inc) await cash(c.manager_id, inc, 'coaching', `${c.name}: ${n} lesson${n === 1 ? '' : 's'} for rival managers`);
@@ -370,7 +381,7 @@ async function rollover(w: any, s: any, done: string[]) {
       if (retire) {
         const { data: sec } = await sb.from('golfer_secrets').select('co').eq('golfer_id', g.id).single();
         const o = coachRatings(g, sec?.co || rawCo(g.id));
-        Object.assign(upd, { retired: true, ret_age: ageOf(y), ask: null, coach_id: null, cr: { price: fairPrice(o, fameOf({ ...g, trophies, seasons })), left: s.lessons_per_day, earn: 0, given: 0, own: 0, last: null } });
+        Object.assign(upd, { retired: true, ret_age: ageOf(y), ask: null, coach_id: null, cr: { price: fairPrice(o, fameOf({ ...g, trophies, seasons })), left: s.lessons_per_day, earn: 0, given: 0, own: 0, last: null, o } });
       }
       moves.push({ id: g.id, upd });
       if (g.manager_id) {

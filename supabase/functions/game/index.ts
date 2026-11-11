@@ -199,7 +199,7 @@ const A: Record<string, (c: any) => Promise<any>> = {
     const { data: sec } = await sb.from('golfer_secrets').select('co').eq('golfer_id', g.id).single();
     const o = coachRatings(g, sec?.co || rawCo(g.id));
     await sb.from('golfers').update({ retired: true, ret_age: 0, ask: null, listed_at: null, coach_id: null, orders: null,
-      cr: { price: fairPrice(o, fameOf(g)), left: s.lessons_per_day, earn: 0, given: 0, own: 0, last: null } }).eq('id', g.id);
+      cr: { price: fairPrice(o, fameOf(g)), left: s.lessons_per_day, earn: 0, given: 0, own: 0, last: null, o } }).eq('id', g.id);
     return { msg: `${g.name} hangs up his spikes and opens a coaching practice. Coaching overall ${Math.round(coOvr(o))}.` };
   },
   async fee({ uid, b }) {
