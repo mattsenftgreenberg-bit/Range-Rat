@@ -40,8 +40,10 @@ let poll=null,boardPoll=null;
 const S=()=>D.settings;
 const mine=()=>D.golfers.filter(g=>!g.retired);
 const G=()=>D.golfers.find(g=>g.id===ui.sel)||mine()[0]||D.golfers[0];
-const QF='qf',isQ=e=>e&&e.tour===QF;
-const T=t=>t===QF?{name:'Quick-Fire Open'}:TOURS[t]||{name:t};
+const QF='qf',isQ=e=>!!e&&String(e.tour).startsWith('qf');
+const qLevel=g=>isCol(g.tour)?'col':g.tour,lvName=lv=>lv==='col'?'College':(TOURS[lv]||{name:lv}).name;
+const canPlay=(e,g)=>isQ(e)?e.tour==='qf:'+qLevel(g):e.tour===g.tour;
+const T=t=>t===QF?{name:'Quick-Fire Opens'}:String(t).startsWith('qf:')?{name:'Quick-Fire · '+lvName(t.slice(3))}:TOURS[t]||{name:t};
 const nR=e=>(e&&e.rounds)||4;
 const etFmt=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
 const when=iso=>etFmt.format(new Date(iso))+' ET';
@@ -139,7 +141,7 @@ stable(){
   const picker=`<div class="row" style="justify-content:flex-start;flex-wrap:wrap">${D.golfers.map(x=>`<button class="btn sm${x.id===g.id?' on':''}" data-act="sel" data-v="${x.id}">${esc(x.name)}${x.retired?' (coach)':''}</button>`).join('')}${mine().length<S().max_golfers?'<button class="btn sm" data-act="go" data-v="scout">+ Scout a junior</button>':''}</div>`;
   const head=`<section class="sec"><div class="who">${avatarO(g)}<div><h1>${flagHTML(g.country)} ${esc(g.name)}</h1><p class="muted">${g.arch?esc(g.arch)+'. ':''}Age ${ageOf(g.yr)}. ${tourOf(g)}. Overall ${Math.round(ovr(g.sk))}.</p></div></div>${picker}</section>`;
   if(g.retired)return head+coachMine(g);
-  const ups=D.events.filter(e=>isQ(e)&&phase(e)==='open').slice(0,2).concat(D.events.filter(e=>e.tour===g.tour&&e.status!=='final').slice(0,5));
+  const ups=D.events.filter(e=>isQ(e)&&canPlay(e,g)&&phase(e)==='open').slice(0,2).concat(D.events.filter(e=>e.tour===g.tour&&e.status!=='final').slice(0,5));
   const st=clamp(5-Math.round((g.fatigue||0)/20),0,5);
   const c=g.coach_id&&D.coaches.find(x=>x.id===g.coach_id),o=g.orders||{};
   return head+`
@@ -174,14 +176,14 @@ stable(){
 ${g.yr>=S().coach_age_yr?`<section class="sec"><h2>Retire to coach</h2><p class="muted">He's old enough to hang up his spikes and coach. His lessons are free for your golfers, and other managers pay you to book him.</p>${ui.confirm==='retire'?`<div class="row" style="justify-content:flex-start"><button class="btn primary sm" data-act="retire">Yes, retire him</button><button class="btn sm" data-act="confirm" data-v="">Keep playing</button></div>`:'<button class="btn sm" data-act="confirm" data-v="retire">Retire him</button>'}</section>`:''}
 ${isCol(g.tour)?`<section class="sec"><h2>College</h2><label class="field" for="hcollege"><span>Plays for</span><select id="hcollege" data-change="college">${CONFS.map((c,i)=>`<optgroup label="${TOURS['col'+i].name}">${c.slice().sort().map(x=>`<option${x===g.college?' selected':''}>${esc(x)}</option>`).join('')}</optgroup>`).join('')}</select></label></section>`:''}`;},
 events(){
-  const tours=[...new Set(D.events.map(e=>e.tour))].sort((a,b)=>TORDER.indexOf(a)-TORDER.indexOf(b));
-  const t=ui.tour||'all',list=D.events.filter(e=>t==='all'||e.tour===t);
-  const qn=D.events.filter(e=>isQ(e)&&phase(e)==='open')[0];
+  const tours=[...new Set(D.events.map(e=>isQ(e)?QF:e.tour))].sort((a,b)=>TORDER.indexOf(a)-TORDER.indexOf(b));
+  const t=ui.tour||'all',list=D.events.filter(e=>t==='all'||(t===QF?isQ(e):e.tour===t));
+  const qn=D.events.filter(e=>isQ(e)&&phase(e)==='open')[0],qset=qn?D.events.filter(e=>isQ(e)&&e.starts_at===qn.starts_at).sort((a,b)=>['col','p3','p2','p1','c2','c1'].indexOf(a.tour.slice(3))-['col','p3','p2','p1','c2','c1'].indexOf(b.tour.slice(3))):[];
   const live=list.filter(e=>['live','closed'].includes(phase(e))&&e.status!=='final'),next=list.filter(e=>phase(e)==='open'&&!isQ(e)).slice(0,12),done=list.filter(e=>e.status==='final').reverse().slice(0,12);
   const row=e=>`<div class="item"><b>${esc(e.name)}${e.test?' <span class="tag">Test</span>':''}</b><span>${T(e.tour).name}. ${COURSES[e.ci].name}. ${when(e.starts_at)}. Purse ${fmt$(e.purse)}${e.fee?`, entry ${fmt$(e.fee)}`:''}.</span><span>${mineIn(e)}</span><button class="btn sm" data-act="board" data-v="${e.id}">${e.status==='final'?'Results':phase(e)==='open'?'Field':'Watch'}</button></div>`;
   return `<section class="intro"><p class="eyebrow">Season ${D.world?D.world.season:1}${D.world?`, through ${new Date(D.world.season_end+'T12:00:00Z').toLocaleDateString('en-US',{month:'long',day:'numeric'})}`:''}</p><h1>Events</h1><p class="lede">Every event starts on the clock and takes about ${Math.round(4*S().round_min)} minutes: four rounds, one hole every ${Math.round(S().round_min*60/18)} seconds. Everyone watches the same holes at the same time.</p></section>
 <section class="sec"><div class="row" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn sm${t==='all'?' on':''}" data-act="tour" data-v="all">All tours</button>${tours.map(x=>`<button class="btn sm${t===x?' on':''}" data-act="tour" data-v="${x}">${T(x).name}</button>`).join('')}</div></section>
-${qn&&(t==='all'||t===QF)?`<section class="sec qfban"><p class="eyebrow">Every ${S().qf_every_min} minutes, all day</p><h2>Quick-Fire Open</h2><p>Two rounds, no cut, about ${Math.round(2*rmin(qn))} minutes. Any golfer can play. ${fmt$(S().qf_fee)} to enter; the pot starts at ${fmt$(S().qf_base)} and grows ${fmt$(S().qf_add)} with every entry. The top third of the field get paid. ${fmt$(S().qf_bonus)} for most greens hit, ${fmt$(S().qf_bonus)} for the long drive, and ${fmt$(S().qf_ace)} for a hole in one. It doesn't tire your golfers.</p><div class="row" style="justify-content:flex-start"><b>Next one ${when(qn.starts_at)}. Entries close in ${until(new Date(deadline(qn)).toISOString())}.</b><button class="btn primary sm" data-act="board" data-v="${qn.id}">Enter golfers</button></div></section>`:''}
+${qn&&(t==='all'||t===QF)?`<section class="sec qfban"><p class="eyebrow">Every ${S().qf_every_min} minutes, all day</p><h2>Quick-Fire Open</h2><p>Two rounds, no cut, about ${Math.round(2*rmin(qn))} minutes. ${fmt$(S().qf_fee)} to enter; the pot starts at ${fmt$(S().qf_base)} and grows ${fmt$(S().qf_add)} with every entry. The top third of the field get paid. ${fmt$(S().qf_bonus)} for most greens hit, ${fmt$(S().qf_bonus)} for the long drive, and ${fmt$(S().qf_ace)} for a hole in one. It doesn't tire your golfers.</p><p><b>Next ones ${when(qn.starts_at)}. Entries close in ${until(new Date(deadline(qn)).toISOString())}.</b> One event for each level, so every golfer plays his own peers.</p><div class="shop">${qset.map(e=>{const n=mine().filter(g=>canPlay(e,g)).length;return `<div class="item"><b>${lvName(e.tour.slice(3))}</b><span>${n?`${n} of your golfers can play.`:'None of your golfers play at this level.'}</span><button class="btn sm${n?' primary':''}" data-act="board" data-v="${e.id}">${n?'Enter golfers':'See the field'}</button></div>`;}).join('')}</div></section>`:''}
 ${live.length?`<section class="sec"><h2>On the course now</h2><div class="shop">${live.map(row).join('')}</div></section>`:''}
 <section class="sec"><h2>Coming up</h2>${next.length?`<div class="shop">${next.map(row).join('')}</div>`:'<p class="muted">Nothing scheduled.</p>'}</section>
 ${done.length?`<section class="sec"><h2>Finished</h2><div class="shop">${done.map(row).join('')}</div></section>`:''}`;},
@@ -190,7 +192,7 @@ board(){const b=ui.board,e=evNow();
   const back='<button class="btn sm" data-act="go" data-v="events">← Events</button>';
   const ph=phase(e);
   const head=`<section class="intro"><p class="eyebrow">${T(e.tour).name}${e.test?' · test event':''}</p><h1>${esc(e.name)}</h1><p class="lede">${COURSES[e.ci].name}: ${COURSES[e.ci].blurb} Starts ${when(e.starts_at)}. ${isQ(e)?`Two rounds, no cut. ${e.status==='open'?`Pot so far ${fmt$(S().qf_base+S().qf_add*((ui.preview&&ui.preview.eid===e.id)?ui.preview.rows.length:0))}`:`Pot ${fmt$(e.purse)}`}.`:`Purse ${fmt$(e.purse)}.`}</p>${back}</section>`;
-  if(ph==='open'){const gs=mine().filter(g=>isQ(e)||g.tour===e.tour);
+  if(ph==='open'){const gs=mine().filter(g=>canPlay(e,g));
     return head+`<section class="sec"><h2>Entries close in ${until(new Date(deadline(e)).toISOString())}</h2>${gs.length?`<div class="shop">${gs.map(g=>evItem(e,g,true)).join('')}</div>`:'<p class="muted">None of your golfers play on this tour.</p>'}${flash()}</section>${previewHTML(e)}`;}
   if(!b||!b.players)return head+'<section class="sec"><p class="muted">Loading the board…</p></section>';
   if(!b.players.length)return head+`<section class="sec"><p class="muted">Setting the field. The first tee time is ${until(e.starts_at)} away.</p></section>`;
@@ -218,7 +220,7 @@ admin(){const s=S();
 <section class="sec"><h2>Change log</h2><button class="btn sm" data-act="alog">Load</button>${ui.log?`<div class="scroll"><table class="tbl"><tbody>${ui.log.map(l=>`<tr><td class="small">${when(l.at)}</td><td>${SETN[l.key]||l.key}</td><td class="small">${esc(JSON.stringify(l.old))} → ${esc(JSON.stringify(l.new))}</td></tr>`).join('')}</tbody></table></div>`:''}</section>`;},
 };
 function valueOfC(sk,yr){const o=ovr(sk),a=yr<=4?[.2,.3,.45,.7][yr-1]:yr<=12?1.15-(yr-5)*.02:yr<=20?1-(yr-12)*.07:Math.max(.04,.3-(yr-21)*.03);return Math.max(1000,Math.round(50000*Math.pow(5,(o-64)/6)*a/500)*500);}
-function mineIn(e){const gs=mine().filter(g=>isQ(e)||g.tour===e.tour);if(!gs.length)return'';const inn=gs.filter(g=>inField(e,g));return inn.length?`Yours in: ${inn.map(g=>esc(g.name)).join(', ')}.`:'None of yours entered.';}
+function mineIn(e){const gs=mine().filter(g=>canPlay(e,g));if(!gs.length)return'';const inn=gs.filter(g=>inField(e,g));return inn.length?`Yours in: ${inn.map(g=>esc(g.name)).join(', ')}.`:'None of yours entered.';}
 function evItem(e,g,full){const ph=phase(e),inn=inField(e,g),x=entryOf(e,g);
   const state=ph!=='open'?(e.status==='final'?'Finished':'Entries closed'):inn?(x&&x.status==='in'?'Entered':'Entered automatically'):'Not entered';
   return `<div class="item"><b>${full?esc(g.name):esc(e.name)}${e.test?' <span class="tag">Test</span>':''}</b><span>${full?'':`${COURSES[e.ci].name}. ${when(e.starts_at)}. `}${e.type}. ${e.fee&&!e.test?`Entry ${fmt$(e.fee)}. `:'No entry fee. '}${ph==='open'?`Closes in ${until(new Date(deadline(e)).toISOString())}.`:''}</span><span class="tag${inn&&ph==='open'?' hot':''}">${state}</span>${ph==='open'?(inn?`<button class="btn sm" data-act="withdraw" data-v="${e.id}" data-g="${g.id}" ${ui.busy?'disabled':''}>Withdraw</button>`:`<button class="btn sm" data-act="enter" data-v="${e.id}" data-g="${g.id}" ${ui.busy?'disabled':''}>Enter</button>`):`<button class="btn sm" data-act="board" data-v="${e.id}">${e.status==='final'?'Results':'Watch'}</button>`}</div>`;}

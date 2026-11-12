@@ -110,16 +110,20 @@ async function scheduleSeason(s: any, season: number, start: string, end: string
 
 // ---------- Quick-Fire Opens ----------
 // A two-round, no-cut event every `qf_every_min` minutes, all day. Open to any golfer, entered by hand only.
-const QF = 'qf';
+// One Quick-Fire Open per level, all teeing off together: college (all three conferences), then each pro and senior tour.
+// Their tour is written 'qf:<level>', e.g. 'qf:col' or 'qf:p1'.
+const QT = ['col', 'p3', 'p2', 'p1', 'c2', 'c1'];
+const isQ = (tour: string) => String(tour).startsWith('qf');
+const qLevel = (tour: string) => String(tour).split(':')[1] || '';
 async function scheduleQuick(s: any, done: string[]) {
   if (!s.qf_on) return;
   const step = s.qf_every_min * 60e3, first = Math.ceil((Date.now() + (s.deadline_min + 1) * 60e3) / step) * step;
   const want = [0, 1, 2].map((k) => new Date(first + k * step).toISOString());
-  const { data: have } = await sb.from('events').select('starts_at').eq('tour', QF).gte('starts_at', want[0]);
-  const got = new Set((have || []).map((e: any) => new Date(e.starts_at).toISOString()));
+  const { data: have } = await sb.from('events').select('tour,starts_at').like('tour', 'qf:%').gte('starts_at', want[0]);
+  const got = new Set((have || []).map((e: any) => e.tour + '|' + new Date(e.starts_at).toISOString()));
   const { data: w } = await sb.from('world').select('season').maybeSingle();
-  const rows = want.filter((at) => !got.has(at)).map((at) => ({
-    tour: QF, season: w?.season || 1, week: 0, name: 'Quick-Fire Open', ci: Math.floor(Math.random() * E.COURSES.length), type: 'Quick-Fire',
+  const rows = want.flatMap((at) => QT.map((lv) => ({ lv, at }))).filter(({ lv, at }) => !got.has('qf:' + lv + '|' + at)).map(({ lv, at }) => ({
+    tour: 'qf:' + lv, season: w?.season || 1, week: 0, name: 'Quick-Fire Open', ci: Math.floor(Math.random() * E.COURSES.length), type: 'Quick-Fire',
     purse: s.qf_base, fee: s.qf_fee, pm: 0, starts_at: at, round_min: s.round_min, rounds: 2,
   }));
   if (rows.length) { await sb.from('events').upsert(rows, { onConflict: 'tour,starts_at', ignoreDuplicates: true }); done.push(`scheduled ${rows.length} Quick-Fire`); }
@@ -129,8 +133,9 @@ async function lockQuick(ev: any, s: any, done: string[]) {
   const ids = (ents || []).map((e: any) => e.golfer_id);
   if (!ids.length) { await sb.from('events').delete().eq('id', ev.id); done.push('Quick-Fire skipped: nobody entered'); return; }
   const { data: w } = await sb.from('world').select('season').single();
-  // the rest of the field: tour regulars from every tour
-  const { data: pool } = await sb.from('golfers').select('id,tour,pool_season').eq('career', false).eq('retired', false).is('manager_id', null);
+  // the rest of the field: regulars from this level
+  const lv = qLevel(ev.tour), tours = lv === 'col' ? ['col0', 'col1', 'col2'] : [lv];
+  const { data: pool } = await sb.from('golfers').select('id,tour,pool_season').in('tour', tours).eq('career', false).eq('retired', false).is('manager_id', null);
   const reg = shuffle((pool || []).filter((g: any) => !E.isCol(g.tour) || g.pool_season === w!.season));
   const fl = ids.map((id: string) => ({ id, managed: true })).concat(reg.slice(0, Math.max(0, E.FIELD - ids.length)).map((g: any) => ({ id: g.id, managed: false })));
   const rs = new Map<string, number>();
@@ -163,7 +168,7 @@ function holeExtras(res: any, par: number) {
 async function lockDue(s: any, done: string[]) {
   const cutoff = new Date(Date.now() + s.deadline_min * 60e3).toISOString();
   const { data: evs } = await sb.from('events').select('*').eq('status', 'open').lte('starts_at', cutoff).order('starts_at').limit(3);
-  for (const ev of evs || []) await (ev.tour === QF ? lockEventQ(ev, s, done) : lockEvent(ev, done));
+  for (const ev of evs || []) await (isQ(ev.tour) ? lockEventQ(ev, s, done) : lockEvent(ev, done));
 }
 async function lockEventQ(ev: any, s: any, done: string[]) {
   const { data: claimed } = await sb.from('events').update({ status: 'locked' }).eq('id', ev.id).eq('status', 'open').select('id');
@@ -231,13 +236,13 @@ const r1 = (v: number) => Math.round(v * 10) / 10;
 async function simRound(ev: any) {
   const r = ev.rounds_done, F = await loadField(ev);
   const eng: any = {
-    ci: ev.ci, course: E.COURSES[ev.ci], round: r, hole: 0, cutLine: ev.cut_line, noCut: ev.tour === QF, last: (ev.rounds || 4) - 1,
+    ci: ev.ci, course: E.COURSES[ev.ci], round: r, hole: 0, cutLine: ev.cut_line, noCut: isQ(ev.tour), last: (ev.rounds || 4) - 1,
     players: F.map(({ ep, g }: any) => ({ g, ep, managed: ep.managed, evPar: ep.ev_par, rounds: [], cut: ep.cut, weekForm: ep.week_form, slot0: ep.slot0, slot: ep.slot ?? undefined, st: r ? { mood: ep.mood } : undefined })),
   };
   if (r === 0) eng.players.forEach((p: any) => (p.weekForm = E.gauss() * (6 - p.g.sk.mental * 0.035) * 0.9));
   E.beginRound(eng);
   const act = eng.players.filter((p: any) => !p.cut), card = new Map<any, number[]>(act.map((p: any) => [p, [] as number[]])), shots: any[] = [];
-  const quick = ev.tour === QF, ext = new Map<any, any>(eng.players.map((p: any) => [p, { gir: 0, drive: 0, aces: 0, ...(p.ep.extra || {}) }]));
+  const quick = isQ(ev.tour), ext = new Map<any, any>(eng.players.map((p: any) => [p, { gir: 0, drive: 0, aces: 0, ...(p.ep.extra || {}) }]));
   for (let h = 0; h < E.HOLES; h++) {
     eng.hole = h;
     const out = E.simHole(eng);
@@ -266,7 +271,7 @@ async function simRound(ev: any) {
 async function finalizeDue(s: any, done: string[]) {
   const { data: evs } = await sb.from('events').select('*').eq('status', 'locked').lte('starts_at', new Date().toISOString()).order('starts_at').limit(10);
   const due = (evs || []).filter((ev: any) => ev.rounds_done >= (ev.rounds || 4) && Date.parse(ev.starts_at) + (ev.rounds || 4) * Number(ev.round_min || s.round_min) * 60e3 <= Date.now()).slice(0, 2);
-  for (const ev of due) await (ev.tour === QF ? finalizeQuick(ev, s, done) : finalize(ev, s, done));
+  for (const ev of due) await (isQ(ev.tour) ? finalizeQuick(ev, s, done) : finalize(ev, s, done));
 }
 async function finalize(ev: any, s: any, done: string[]) {
   const { data: claimed } = await sb.from('events').update({ status: 'final' }).eq('id', ev.id).eq('status', 'locked').select('id');
