@@ -248,7 +248,7 @@ async function simRound(ev: any) {
     const out = E.simHole(eng);
     for (const [p, res] of out as Map<any, any>) {
       card.get(p)!.push(res.score);
-      if (quick) { const x = holeExtras(res, eng.course.holes[h].par), o = ext.get(p); o.gir += x.gir; o.aces += x.ace; o.drive = Math.max(o.drive, x.drive); }
+      if (quick) { const x = holeExtras(res, eng.course.holes[h].par), o = ext.get(p); o.gir += x.gir; o.aces += x.ace; o.drive = Math.max(o.drive, x.drive); const rr = (o.r ??= []); (rr[r] ??= { g: [], d: [] }); rr[r].g.push(x.gir); rr[r].d.push(x.drive); }
       if (p.managed) shots.push({
         event_id: ev.id, golfer_id: p.g.id, round: r, hole: h, mood: r1(p.st.mood), run: p.st.run,
         shots: res.shots.map((x: any) => ({ k: x.k, from: x.from.map(r1), to: x.to.map(r1), text: x.text, holed: !!x.holed })),

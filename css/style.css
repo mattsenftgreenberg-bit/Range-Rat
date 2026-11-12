@@ -239,3 +239,17 @@ input[type=number]{font:inherit;color:var(--ink);background:var(--surface);borde
 .qfban h2{margin:0}
 .podium-wrap .ace{background:#c9a227;color:#1d1a0c;border-radius:8px;padding:12px 14px;font-size:1.05rem;animation:rise .9s cubic-bezier(.2,.8,.2,1) both}
 .podium-wrap .ace b{font-family:var(--display);text-transform:uppercase;letter-spacing:.05em;font-size:1.3rem;margin-right:6px}
+/* ---- online: Quick-Fire live bonus races and the tee-off countdown ---- */
+.qflive{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:10px;margin-block:4px 14px}
+.qfcard{border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-width:0;background:var(--surface)}
+.qfcard.hot{background:#c9a227;color:#1d1a0c}
+.qfcard h3{margin:0;font-family:var(--display);text-transform:uppercase;letter-spacing:.06em;font-size:1rem}
+.qfcard p{margin:0 0 6px}
+.qfcard ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.qfcard li{display:flex;gap:6px;align-items:baseline;min-width:0;overflow-wrap:anywhere}
+.qfcard li b{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}
+.qfcard li.me{font-weight:700}
+.teebox{text-align:center;padding:22px 12px;border-radius:10px;background:var(--board);color:var(--board-ink);margin-block:6px 14px}
+.teebox h2{margin:0;color:inherit}
+.teebox .muted,.teebox .eyebrow{color:inherit;opacity:.75}
+.teeclock{font-family:var(--display);font-size:clamp(3.2rem,18vw,5.5rem);line-height:1;font-variant-numeric:tabular-nums;margin:6px 0;color:#e3b420}

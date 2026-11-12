@@ -194,9 +194,10 @@ board(){const b=ui.board,e=evNow();
   const head=`<section class="intro"><p class="eyebrow">${T(e.tour).name}${e.test?' · test event':''}</p><h1>${esc(e.name)}</h1><p class="lede">${COURSES[e.ci].name}: ${COURSES[e.ci].blurb} Starts ${when(e.starts_at)}. ${isQ(e)?`Two rounds, no cut. ${e.status==='open'?`Pot so far ${fmt$(S().qf_base+S().qf_add*((ui.preview&&ui.preview.eid===e.id)?ui.preview.rows.length:0))}`:`Pot ${fmt$(e.purse)}`}.`:`Purse ${fmt$(e.purse)}.`}</p>${back}</section>`;
   if(ph==='open'){const gs=mine().filter(g=>canPlay(e,g));
     return head+`<section class="sec"><h2>Entries close in ${until(new Date(deadline(e)).toISOString())}</h2>${gs.length?`<div class="shop">${gs.map(g=>evItem(e,g,true)).join('')}</div>`:'<p class="muted">None of your golfers play on this tour.</p>'}${flash()}</section>${previewHTML(e)}`;}
+  if(ph==='closed')return head+teeHTML(e,b);
   if(!b||!b.players)return head+'<section class="sec"><p class="muted">Loading the board…</p></section>';
   if(!b.players.length)return head+`<section class="sec"><p class="muted">Setting the field. The first tee time is ${until(e.starts_at)} away.</p></section>`;
-  return head+(e.status==='final'?podiumHTML(b,e):'')+watchHTML(b,e)+`<div id="boardBox">${boardHTML(b,e)}</div>`;},
+  return head+(e.status==='final'?podiumHTML(b,e):'')+watchHTML(b,e)+`<div id="boardBox">${boxHTML(b,e)}</div>`;},
 standings(){const tours=TORDER,t=ui.tour&&ui.tour!=='all'?ui.tour:(G()&&!G().retired?G().tour:'p1');ui.tour=t;
   const rows=ui.stand&&ui.stand.t===t?ui.stand.rows:null;if(!rows)loadStand(t);
   return `<section class="intro"><p class="eyebrow">Season ${D.world?D.world.season:1}</p><h1>Standings</h1><p class="lede">Points from finished events this season. At the end of the month the top ${Math.round(FIELD*.2)} on each pro tour go up and the bottom ${Math.round(FIELD*.2)} go down.</p></section>
@@ -264,6 +265,22 @@ function boardHTML(b,e){const rows=boardRows(b,e),fin=e.status==='final',cutDone
  <tr class="sep"><td colspan="5">${full?'Full field':'Leaders'}</td></tr></tbody></table>
  <div class="${full?'bscroll':''}" id="bscroll"><table>${COLG}<tbody>${show.map(r=>row(r,rows.indexOf(r)===lastIn)).join('')}</tbody></table></div>
  <div class="row"><span class="muted small">${live?'Updates every few seconds.':proj!==null?'':''}${proj!==null?' Dashed line: the projected cut. Top '+CUT+' and ties play the weekend.':''}</span><button class="btn sm" data-act="fullBoard">${full?'Show top 10':'Show all '+rows.length}</button></div></section>`;}
+function boxHTML(b,e){return (isQ(e)&&e.status!=='final'?qfLiveHTML(b,e):'')+boardHTML(b,e);}
+/* Quick-Fire: the bonus races so far (only holes already played) */
+function qfLiveHTML(b,e){const P=b.players,L=p=>p.live||{},aces=[];
+  P.forEach(p=>(p.scores||[]).forEach((rd,ri)=>rd.forEach((s,h)=>{if(s===1)aces.push({p,ri,h});})));
+  const top=(k,f)=>P.filter(p=>L(p)[k]>0).sort((a,c)=>L(c)[k]-L(a)[k]).slice(0,3).map((p,i)=>`<li class="${p.mine?'me':p.managed?'mine':''}"><span>${i+1}.</span> ${flagHTML(p.country)}${esc(p.name)}<b>${f(L(p)[k])}</b></li>`).join('');
+  const dr=top('drive',v=>v+' yds'),gi=top('gir',v=>v);
+  return `<section class="qflive"><div class="qfcard"><h3>Long drive</h3><p class="muted small">${fmt$(S().qf_bonus)} bonus</p><ol>${dr||'<li class="muted">No drives yet</li>'}</ol></div>
+ <div class="qfcard"><h3>Greens hit</h3><p class="muted small">${fmt$(S().qf_bonus)} bonus for the most</p><ol>${gi||'<li class="muted">No greens yet</li>'}</ol></div>
+ <div class="qfcard${aces.length?' hot':''}"><h3>Holes in one</h3><p class="muted small">${fmt$(S().qf_ace)} each</p><ol>${aces.length?aces.map(a=>`<li class="${a.p.mine?'me':a.p.managed?'mine':''}">${flagHTML(a.p.country)}${esc(a.p.name)}<b>R${a.ri+1} #${a.h+1}</b></li>`).join(''):'<li class="muted">None yet</li>'}</ol></div></section>`;}
+/* the last minutes before the first tee shot */
+function teeHTML(e,b){const P=b&&b.players||[],mineP=P.filter(p=>p.mine),fav=P.slice().sort((a,c)=>(c.odds0||0)-(a.odds0||0)).slice(0,5);
+  const li=p=>`<li class="${p.mine?'me':p.managed?'mine':''}">${flagHTML(p.country)}${esc(p.name)}${p.managed?` <span class="muted small">${esc(p.stable||'')}</span>`:''}<b>${p.odds0?oddsLabel(p.odds0):''}</b></li>`;
+  return `<section class="teebox"><p class="eyebrow">Entries are closed</p><h2>Tees off in</h2><div class="teeclock" id="teeClock" data-at="${e.starts_at}">${clockTxt(e.starts_at)}</div><p class="muted">${P.length?`${P.length} golfers in the field.`:'Setting the field…'} ${isQ(e)?`Pot ${fmt$(e.purse)}.`:`Purse ${fmt$(e.purse)}.`}</p></section>
+ ${P.length?`<section class="qflive">${mineP.length?`<div class="qfcard"><h3>Your golfers</h3><p class="muted small">Starting odds</p><ol>${mineP.map(li).join('')}</ol></div>`:''}<div class="qfcard"><h3>Favourites</h3><p class="muted small">Starting odds</p><ol>${fav.map(li).join('')}</ol></div></section>`:''}`;}
+function clockTxt(iso){let s=Math.max(0,Math.ceil((Date.parse(iso)-Date.now())/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;}
+setInterval(()=>{const c=document.getElementById('teeClock');if(!c)return;c.textContent=clockTxt(c.dataset.at);if(Date.parse(c.dataset.at)<=Date.now()&&!c.dataset.done){c.dataset.done=1;setTimeout(()=>{loadBoard().then(render);},1500);}},1000);
 /* the end of an event: the podium and the week in numbers */
 function bonusHTML(rows){const X=r=>r.p.extra||{},best=k=>{const m=Math.max(0,...rows.map(r=>X(r)[k]||0));return m?{m,w:rows.filter(r=>(X(r)[k]||0)===m)}:null;};
   const gi=best('gir'),dr=best('drive'),aces=rows.filter(r=>X(r).aces);const nm=w=>w.map(r=>`${flagHTML(r.p.country)}${esc(r.p.name)}${r.p.managed?` <span class="muted small">(${esc(r.p.stable||'')})</span>`:''}`).join(', ');
@@ -506,7 +523,7 @@ if(SB){
     const was=ui.board&&ui.board.event&&ui.board.event.status,hadPlayers=ui.board&&ui.board.players&&ui.board.players.length;
     loadBoard().then(()=>{const a=document.activeElement;if(a&&a.tagName==='SELECT')return;const e2=evNow(),bb=document.getElementById('boardBox');
       const changed=!ui.board||ui.board.event.status!==was||!hadPlayers;
-      if(bb&&ui.board&&e2&&!changed){keepScroll(()=>{bb.innerHTML=boardHTML(ui.board,e2);});paintSide();}
+      if(bb&&ui.board&&e2&&!changed){keepScroll(()=>{bb.innerHTML=boxHTML(ui.board,e2);});paintSide();}
       else{if(e2&&ui.board&&ui.board.event.status==='final'){const d=D.events.find(x=>x.id===ui.ev);if(d)d.status='final';}render();}});},5000);
 }else document.getElementById('view').innerHTML='<p class="lede">Couldn’t load the game. Refresh to try again.</p>';
 window.addEventListener('resize',()=>{if(document.getElementById('cv'))fitCanvas();});
