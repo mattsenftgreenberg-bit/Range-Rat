@@ -9,7 +9,7 @@ export const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPA
 
 // Every number the admin page can change. Values in the settings table override these.
 export const DEFAULTS: Record<string, any> = {
-  start_cash: 25000, max_golfers: 8, sessions_per_day: 1, lessons_per_day: 5, coach_max: 1.5,
+  start_cash: 75000, max_golfers: 8, sessions_per_day: 1, lessons_per_day: 5, coach_max: 1.5,
   deadline_min: 5, round_min: 7.5, events_per_season: 8, hours: [18, 19, 20, 21],
   gain_mult: 1, rust_per_day: 0.025, recovery_per_day: 15, event_fatigue: 20, train_fatigue: 15,
   purse_mult: 1, fee_mult: 1, sale_chance_mult: 1, coach_age_yr: 15,

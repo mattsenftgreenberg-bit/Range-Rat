@@ -78,7 +78,7 @@ const A: Record<string, (c: any) => Promise<any>> = {
     const { data: sec } = await sb.from('manager_secrets').select('prospect').eq('id', uid).maybeSingle();
     const p = sec?.prospect; if (!p) no('Scout a junior first.');
     const college = E.COLLEGES.includes(b.college) ? b.college : E.pick(E.COLLEGES);
-    const country = E.CN.includes(b.country) ? b.country : 'US';
+    const country = /^[A-Z]{2,3}$/.test(String(b.country)) ? b.country : 'US';
     const [id] = await insertGolfers([golferRow({ name: clean(b.name) || 'Tucker Hale', country, college, arch: p.arch, sk: p.sk, tour: COLLEGE_TOUR(college), yr: 1 },
       { manager_id: uid, stable: me.name, career: true, color: E.clamp(+b.color || 0, 0, 5), sessions: s.sessions_per_day })], [{ ce: p.ce, peak: p.peak, agg: p.agg }]);
     await sb.from('manager_secrets').update({ prospect: null }).eq('id', uid);
