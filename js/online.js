@@ -30,8 +30,8 @@ const umbOf=k=>'smlx'.split('').find(u=>SUB[u].includes(k));
    Everything here reads the shared tables (read-only for players) and sends every change to the `game` server function. */
 const SB=window.supabase&&window.RR_CONFIG?window.supabase.createClient(RR_CONFIG.url,RR_CONFIG.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
 const FN=RR_CONFIG.url+'/functions/v1/game';
-const DEFAULTS={start_cash:75000,max_golfers:8,sessions_per_day:1,lessons_per_day:5,coach_max:1.5,deadline_min:5,round_min:7.5,events_per_season:8,hours:[18,19,20,21],gain_mult:1,rust_per_day:.025,recovery_per_day:15,event_fatigue:20,train_fatigue:15,purse_mult:1,fee_mult:1,sale_chance_mult:1,coach_age_yr:15};
-const SETN={start_cash:'Starting money for a new roster',max_golfers:'Most active golfers per roster',sessions_per_day:'Range sessions per golfer per day',lessons_per_day:'Lessons each coach gives per day',coach_max:'Best coach multiplier',deadline_min:'Entry deadline, minutes before the start',round_min:'Minutes per round',events_per_season:'Events per tour per month',hours:'Start hours (New York time)',gain_mult:'Training gain multiplier',rust_per_day:'Rust per skipped day',recovery_per_day:'Fatigue recovered per day',event_fatigue:'Fatigue from playing an event',train_fatigue:'Fatigue from a range session',purse_mult:'Purse multiplier (new events)',fee_mult:'Entry fee multiplier (new events)',sale_chance_mult:'How keen rival coaches are to buy',coach_age_yr:'Career year a golfer may retire to coach'};
+const DEFAULTS={start_cash:75000,max_golfers:8,sessions_per_day:1,lessons_per_day:5,coach_max:1.5,deadline_min:5,round_min:7.5,events_per_season:8,hours:[18,19,20,21],gain_mult:1,rust_per_day:.025,recovery_per_day:15,event_fatigue:20,train_fatigue:15,purse_mult:1,fee_mult:1,sale_chance_mult:1,coach_age_yr:15,qf_on:true,qf_every_min:20,qf_fee:200,qf_base:20000,qf_add:200,qf_bonus:1000,qf_ace:1000000};
+const SETN={qf_on:'Quick-Fire Opens running (true or false)',qf_every_min:'Minutes between Quick-Fire Opens',qf_fee:'Quick-Fire entry fee',qf_base:'Quick-Fire base pot',qf_add:'Added to the pot per entry',qf_bonus:'Most greens / long drive bonus',qf_ace:'Hole-in-one bonus',start_cash:'Starting money for a new roster',max_golfers:'Most active golfers per roster',sessions_per_day:'Range sessions per golfer per day',lessons_per_day:'Lessons each coach gives per day',coach_max:'Best coach multiplier',deadline_min:'Entry deadline, minutes before the start',round_min:'Minutes per round',events_per_season:'Events per tour per month',hours:'Start hours (New York time)',gain_mult:'Training gain multiplier',rust_per_day:'Rust per skipped day',recovery_per_day:'Fatigue recovered per day',event_fatigue:'Fatigue from playing an event',train_fatigue:'Fatigue from a range session',purse_mult:'Purse multiplier (new events)',fee_mult:'Entry fee multiplier (new events)',sale_chance_mult:'How keen rival coaches are to buy',coach_age_yr:'Career year a golfer may retire to coach'};
 const ui={view:'loading',sel:null,msg:'',err:'',busy:false,auth:{mode:'in',email:'',msg:'',err:false,busy:false},tour:null,ev:null,watch:null,board:null,feed:null,pros:{name:'',country:'US',college:'',color:0},full:false};
 const D={user:null,me:null,golfers:[],events:[],entries:[],world:null,settings:{...DEFAULTS},coaches:[],market:[],names:{}};
 let poll=null,boardPoll=null;
@@ -40,17 +40,19 @@ let poll=null,boardPoll=null;
 const S=()=>D.settings;
 const mine=()=>D.golfers.filter(g=>!g.retired);
 const G=()=>D.golfers.find(g=>g.id===ui.sel)||mine()[0]||D.golfers[0];
-const T=t=>TOURS[t]||{name:t};
+const QF='qf',isQ=e=>e&&e.tour===QF;
+const T=t=>t===QF?{name:'Quick-Fire Open'}:TOURS[t]||{name:t};
+const nR=e=>(e&&e.rounds)||4;
 const etFmt=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
 const when=iso=>etFmt.format(new Date(iso))+' ET';
 function until(iso){let s=Math.round((Date.parse(iso)-Date.now())/1000);if(s<=0)return'now';const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d?`${d}d ${h}h`:h?`${h}h ${m}m`:m?`${m}m ${s%60}s`:`${s}s`;}
 const deadline=e=>Date.parse(e.starts_at)-S().deadline_min*60e3;
 const rmin=e=>Number(e&&e.round_min)||S().round_min;
-const endsAt=e=>Date.parse(e.starts_at)+4*rmin(e)*60e3;
+const endsAt=e=>Date.parse(e.starts_at)+nR(e)*rmin(e)*60e3;
 const evNow=()=>{const d=D.events.find(x=>x.id===ui.ev),s=ui.board&&ui.board.event&&ui.board.event.id===ui.ev?ui.board.event:null;return d||s?Object.assign({},d||{},s||{}):null;};
 function phase(e){if(e.status==='final')return'final';const now=Date.now();if(now<deadline(e))return'open';if(now<Date.parse(e.starts_at))return'closed';return'live';}
 const entryOf=(e,g)=>D.entries.find(x=>x.event_id===e.id&&x.golfer_id===g.id);
-function inField(e,g){const x=entryOf(e,g);if(x)return x.status==='in';return e.test||g.enter_rule==='all'||(g.enter_rule==='signature'&&['Signature','Finale'].includes(e.type));}
+function inField(e,g){const x=entryOf(e,g);if(x)return x.status==='in';if(isQ(e))return false;return e.test||g.enter_rule==='all'||(g.enter_rule==='signature'&&['Signature','Finale'].includes(e.type));}
 const subRowO=(g,k,ro,kid)=>`<div class="sn${kid?' kid':''}">${SUBN[k]}<small>${SUBD[k]}</small></div><div class="track"><i style="width:${clamp(g.sk[k],0,100)}%"></i></div><div class="sv">${Math.round(g.sk[k])}</div>${ro?'':`<button class="btn xs" data-act="train" data-v="${k}" ${g.sessions>0?'':'disabled'}>Drill</button>`}`;
 function umbO(g,u,ro){const v=um(g.sk,u);let rows;
   if(u==='s'){const pv=(g.sk.sputt+g.sk.lputt)/2;rows=['wedge','pitch','chip','bunker'].map(k=>subRowO(g,k,ro)).join('')+`<div class="sn grp">Putting</div><div class="track"><i style="width:${pv}%"></i></div><div class="sv">${Math.round(pv)}</div>${ro?'':'<span></span>'}`+subRowO(g,'sputt',ro,1)+subRowO(g,'lputt',ro,1);}
@@ -80,7 +82,7 @@ async function load(){
   const [me,gs,ev,en,w,st,co,mk]=await Promise.all([
     SB.from('managers').select('*').eq('id',uid).maybeSingle(),
     SB.from('golfers').select('*').eq('manager_id',uid).order('created_at'),
-    SB.from('events').select('id,tour,season,week,name,ci,type,purse,fee,pm,starts_at,status,rounds_done,field,test,round_min').gte('starts_at',new Date(Date.now()-3*864e5).toISOString()).order('starts_at').limit(400),
+    SB.from('events').select('id,tour,season,week,name,ci,type,purse,fee,pm,starts_at,status,rounds_done,field,test,round_min,rounds').gte('starts_at',new Date(Date.now()-3*864e5).toISOString()).order('starts_at').limit(400),
     SB.from('entries').select('*').eq('manager_id',uid),
     SB.from('world').select('*').maybeSingle(),
     SB.from('settings').select('key,value'),
@@ -137,7 +139,7 @@ stable(){
   const picker=`<div class="row" style="justify-content:flex-start;flex-wrap:wrap">${D.golfers.map(x=>`<button class="btn sm${x.id===g.id?' on':''}" data-act="sel" data-v="${x.id}">${esc(x.name)}${x.retired?' (coach)':''}</button>`).join('')}${mine().length<S().max_golfers?'<button class="btn sm" data-act="go" data-v="scout">+ Scout a junior</button>':''}</div>`;
   const head=`<section class="sec"><div class="who">${avatarO(g)}<div><h1>${flagHTML(g.country)} ${esc(g.name)}</h1><p class="muted">${g.arch?esc(g.arch)+'. ':''}Age ${ageOf(g.yr)}. ${tourOf(g)}. Overall ${Math.round(ovr(g.sk))}.</p></div></div>${picker}</section>`;
   if(g.retired)return head+coachMine(g);
-  const ups=D.events.filter(e=>e.tour===g.tour&&e.status!=='final').slice(0,6);
+  const ups=D.events.filter(e=>isQ(e)&&phase(e)==='open').slice(0,2).concat(D.events.filter(e=>e.tour===g.tour&&e.status!=='final').slice(0,5));
   const st=clamp(5-Math.round((g.fatigue||0)/20),0,5);
   const c=g.coach_id&&D.coaches.find(x=>x.id===g.coach_id),o=g.orders||{};
   return head+`
@@ -161,7 +163,7 @@ stable(){
  <div class="row" style="justify-content:flex-start"><button class="btn sm" data-act="orders" ${ui.busy?'disabled':''}>Save orders</button></div>
 </section>
 <section class="sec">
- <h2>Events on the ${T(g.tour).name}</h2>
+ <h2>His events</h2>
  <label class="field" for="eRule"><span>Enter him automatically in</span><select id="eRule" data-change="rule">${[['all','Every event'],['signature','Signature events and the Finale only'],['none','Nothing: I enter him by hand']].map(([v,l])=>`<option value="${v}"${g.enter_rule===v?' selected':''}>${l}</option>`).join('')}</select></label>
  ${ups.length?`<div class="shop">${ups.map(e=>evItem(e,g)).join('')}</div>`:'<p class="muted">Nothing scheduled yet on his tour.</p>'}
  <p class="muted small">Entries close ${S().deadline_min} minutes before the start. Auto entries pay the fee when entries close.</p>
@@ -174,10 +176,12 @@ ${isCol(g.tour)?`<section class="sec"><h2>College</h2><label class="field" for="
 events(){
   const tours=[...new Set(D.events.map(e=>e.tour))].sort((a,b)=>TORDER.indexOf(a)-TORDER.indexOf(b));
   const t=ui.tour||'all',list=D.events.filter(e=>t==='all'||e.tour===t);
-  const live=list.filter(e=>['live','closed'].includes(phase(e))&&e.status!=='final'),next=list.filter(e=>phase(e)==='open').slice(0,12),done=list.filter(e=>e.status==='final').reverse().slice(0,12);
+  const qn=D.events.filter(e=>isQ(e)&&phase(e)==='open')[0];
+  const live=list.filter(e=>['live','closed'].includes(phase(e))&&e.status!=='final'),next=list.filter(e=>phase(e)==='open'&&!isQ(e)).slice(0,12),done=list.filter(e=>e.status==='final').reverse().slice(0,12);
   const row=e=>`<div class="item"><b>${esc(e.name)}${e.test?' <span class="tag">Test</span>':''}</b><span>${T(e.tour).name}. ${COURSES[e.ci].name}. ${when(e.starts_at)}. Purse ${fmt$(e.purse)}${e.fee?`, entry ${fmt$(e.fee)}`:''}.</span><span>${mineIn(e)}</span><button class="btn sm" data-act="board" data-v="${e.id}">${e.status==='final'?'Results':phase(e)==='open'?'Field':'Watch'}</button></div>`;
   return `<section class="intro"><p class="eyebrow">Season ${D.world?D.world.season:1}${D.world?`, through ${new Date(D.world.season_end+'T12:00:00Z').toLocaleDateString('en-US',{month:'long',day:'numeric'})}`:''}</p><h1>Events</h1><p class="lede">Every event starts on the clock and takes about ${Math.round(4*S().round_min)} minutes: four rounds, one hole every ${Math.round(S().round_min*60/18)} seconds. Everyone watches the same holes at the same time.</p></section>
 <section class="sec"><div class="row" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn sm${t==='all'?' on':''}" data-act="tour" data-v="all">All tours</button>${tours.map(x=>`<button class="btn sm${t===x?' on':''}" data-act="tour" data-v="${x}">${T(x).name}</button>`).join('')}</div></section>
+${qn&&(t==='all'||t===QF)?`<section class="sec qfban"><p class="eyebrow">Every ${S().qf_every_min} minutes, all day</p><h2>Quick-Fire Open</h2><p>Two rounds, no cut, about ${Math.round(2*rmin(qn))} minutes. Any golfer can play. ${fmt$(S().qf_fee)} to enter; the pot starts at ${fmt$(S().qf_base)} and grows ${fmt$(S().qf_add)} with every entry. The top third of the field get paid. ${fmt$(S().qf_bonus)} for most greens hit, ${fmt$(S().qf_bonus)} for the long drive, and ${fmt$(S().qf_ace)} for a hole in one. It doesn't tire your golfers.</p><div class="row" style="justify-content:flex-start"><b>Next one ${when(qn.starts_at)}. Entries close in ${until(new Date(deadline(qn)).toISOString())}.</b><button class="btn primary sm" data-act="board" data-v="${qn.id}">Enter golfers</button></div></section>`:''}
 ${live.length?`<section class="sec"><h2>On the course now</h2><div class="shop">${live.map(row).join('')}</div></section>`:''}
 <section class="sec"><h2>Coming up</h2>${next.length?`<div class="shop">${next.map(row).join('')}</div>`:'<p class="muted">Nothing scheduled.</p>'}</section>
 ${done.length?`<section class="sec"><h2>Finished</h2><div class="shop">${done.map(row).join('')}</div></section>`:''}`;},
@@ -185,8 +189,8 @@ board(){const b=ui.board,e=evNow();
   if(!e)return '<section class="sec"><p class="muted">Loading the board…</p></section>';
   const back='<button class="btn sm" data-act="go" data-v="events">← Events</button>';
   const ph=phase(e);
-  const head=`<section class="intro"><p class="eyebrow">${T(e.tour).name}${e.test?' · test event':''}</p><h1>${esc(e.name)}</h1><p class="lede">${COURSES[e.ci].name}: ${COURSES[e.ci].blurb} Starts ${when(e.starts_at)}. Purse ${fmt$(e.purse)}.</p>${back}</section>`;
-  if(ph==='open'){const gs=mine().filter(g=>g.tour===e.tour);
+  const head=`<section class="intro"><p class="eyebrow">${T(e.tour).name}${e.test?' · test event':''}</p><h1>${esc(e.name)}</h1><p class="lede">${COURSES[e.ci].name}: ${COURSES[e.ci].blurb} Starts ${when(e.starts_at)}. ${isQ(e)?`Two rounds, no cut. ${e.status==='open'?`Pot so far ${fmt$(S().qf_base+S().qf_add*((ui.preview&&ui.preview.eid===e.id)?ui.preview.rows.length:0))}`:`Pot ${fmt$(e.purse)}`}.`:`Purse ${fmt$(e.purse)}.`}</p>${back}</section>`;
+  if(ph==='open'){const gs=mine().filter(g=>isQ(e)||g.tour===e.tour);
     return head+`<section class="sec"><h2>Entries close in ${until(new Date(deadline(e)).toISOString())}</h2>${gs.length?`<div class="shop">${gs.map(g=>evItem(e,g,true)).join('')}</div>`:'<p class="muted">None of your golfers play on this tour.</p>'}${flash()}</section>${previewHTML(e)}`;}
   if(!b||!b.players)return head+'<section class="sec"><p class="muted">Loading the board…</p></section>';
   if(!b.players.length)return head+`<section class="sec"><p class="muted">Setting the field. The first tee time is ${until(e.starts_at)} away.</p></section>`;
@@ -214,12 +218,12 @@ admin(){const s=S();
 <section class="sec"><h2>Change log</h2><button class="btn sm" data-act="alog">Load</button>${ui.log?`<div class="scroll"><table class="tbl"><tbody>${ui.log.map(l=>`<tr><td class="small">${when(l.at)}</td><td>${SETN[l.key]||l.key}</td><td class="small">${esc(JSON.stringify(l.old))} → ${esc(JSON.stringify(l.new))}</td></tr>`).join('')}</tbody></table></div>`:''}</section>`;},
 };
 function valueOfC(sk,yr){const o=ovr(sk),a=yr<=4?[.2,.3,.45,.7][yr-1]:yr<=12?1.15-(yr-5)*.02:yr<=20?1-(yr-12)*.07:Math.max(.04,.3-(yr-21)*.03);return Math.max(1000,Math.round(50000*Math.pow(5,(o-64)/6)*a/500)*500);}
-function mineIn(e){const gs=mine().filter(g=>g.tour===e.tour);if(!gs.length)return'';const inn=gs.filter(g=>inField(e,g));return inn.length?`Yours in: ${inn.map(g=>esc(g.name)).join(', ')}.`:'None of yours entered.';}
+function mineIn(e){const gs=mine().filter(g=>isQ(e)||g.tour===e.tour);if(!gs.length)return'';const inn=gs.filter(g=>inField(e,g));return inn.length?`Yours in: ${inn.map(g=>esc(g.name)).join(', ')}.`:'None of yours entered.';}
 function evItem(e,g,full){const ph=phase(e),inn=inField(e,g),x=entryOf(e,g);
   const state=ph!=='open'?(e.status==='final'?'Finished':'Entries closed'):inn?(x&&x.status==='in'?'Entered':'Entered automatically'):'Not entered';
   return `<div class="item"><b>${full?esc(g.name):esc(e.name)}${e.test?' <span class="tag">Test</span>':''}</b><span>${full?'':`${COURSES[e.ci].name}. ${when(e.starts_at)}. `}${e.type}. ${e.fee&&!e.test?`Entry ${fmt$(e.fee)}. `:'No entry fee. '}${ph==='open'?`Closes in ${until(new Date(deadline(e)).toISOString())}.`:''}</span><span class="tag${inn&&ph==='open'?' hot':''}">${state}</span>${ph==='open'?(inn?`<button class="btn sm" data-act="withdraw" data-v="${e.id}" data-g="${g.id}" ${ui.busy?'disabled':''}>Withdraw</button>`:`<button class="btn sm" data-act="enter" data-v="${e.id}" data-g="${g.id}" ${ui.busy?'disabled':''}>Enter</button>`):`<button class="btn sm" data-act="board" data-v="${e.id}">${e.status==='final'?'Results':'Watch'}</button>`}</div>`;}
 function careerHTML(g){const s=Object.assign({ev:0,cuts:0,wins:0,top10:0,earn:0,rounds:0,par:0,low:null},g.stats);
-  return `<div class="stats"><div><b>${s.ev}</b><span>Events</span></div><div><b>${s.wins}</b><span>Wins</span></div><div><b>${s.top10}</b><span>Top tens</span></div><div><b>${s.ev?s.cuts+'/'+s.ev:'–'}</b><span>Cuts made</span></div><div><b>${s.low===null?'–':fmtPar(s.low)}</b><span>Low round</span></div><div><b>${fmt$(s.earn)}</b><span>Earned</span></div></div>
+  return `${s.qf_ev?`<p class="muted small">Quick-Fire Opens: ${s.qf_ev} played, ${s.qf_wins||0} won, ${fmt$(s.qf_earn||0)} earned${s.qf_aces?`, ${s.qf_aces} hole${s.qf_aces>1?'s':''} in one`:''}. These don't count toward his career record.</p>`:''}<div class="stats"><div><b>${s.ev}</b><span>Events</span></div><div><b>${s.wins}</b><span>Wins</span></div><div><b>${s.top10}</b><span>Top tens</span></div><div><b>${s.ev?s.cuts+'/'+s.ev:'–'}</b><span>Cuts made</span></div><div><b>${s.low===null?'–':fmtPar(s.low)}</b><span>Low round</span></div><div><b>${fmt$(s.earn)}</b><span>Earned</span></div></div>
   ${(g.hist||[]).length?`<div class="scroll"><table class="tbl"><thead><tr><th>Event</th><th class="num">R1</th><th class="num">R2</th><th class="num">R3</th><th class="num">R4</th><th class="num">Par</th><th class="num">Pos</th><th class="num">Won</th></tr></thead><tbody>${g.hist.slice(0,12).map(x=>`<tr><td>${esc(x.n)}</td>${[0,1,2,3].map(j=>`<td class="num">${x.r[j]||''}</td>`).join('')}<td class="num${x.par<0?' under':''}">${fmtPar(x.par)}</td><td class="num">${x.pos}</td><td class="num">${x.pay?fmt$(x.pay):''}</td></tr>`).join('')}</tbody></table></div>`:''}`;}
 function sellHTML(g){if(!canSellC(g))return '<p class="muted">College freshmen and sophomores can’t be sold.</p>';const val=valueOfC(g.sk,g.yr);
   return g.ask?`<p>Listed at ${fmt$(g.ask)} (market value ${fmt$(val)}). Rival coaches look once a day; other managers can buy him any time.</p><button class="btn sm" data-act="unlist">Take him off the market</button>`
@@ -241,17 +245,17 @@ function boardHTML(b,e){const rows=boardRows(b,e),fin=e.status==='final',cutDone
   const R=Math.max(0,...rows.map(r=>r.rd));
   rows.sort((a,c)=>fin?((a.p.pos_n||999)-(c.p.pos_n||999)):((a.p.cut?1:0)-(c.p.cut?1:0)||a.tot-c.tot||c.thru-a.thru));
   let pos=0;rows.forEach((r,i)=>{if(fin){r.pos=r.p.pos||'';return;}if(i===0||r.tot!==rows[i-1].tot||r.p.cut!==rows[i-1].p.cut)pos=i+1;r.pos=r.p.cut?'MC':(rows.filter(x=>!x.p.cut&&x.tot===r.tot).length>1?'T':'')+pos;});
-  if(!fin){const act=rows.filter(r=>!r.p.cut),list=act.map(r=>({r:ratingFor(r.p,e.ci),cur:r.tot,H:Math.max(0,(3-r.rd)*18+(18-r.thru))}));const w=winProbs(list,1500);act.forEach((r,i)=>r.odds=oddsLabel(w[i]));}
-  const proj=!cutDone&&rows.length>CUT?rows[CUT-1].tot:null,lastIn=proj===null?-1:rows.filter(r=>r.tot<=proj).length-1;
+  if(!fin){const act=rows.filter(r=>!r.p.cut),list=act.map(r=>({r:ratingFor(r.p,e.ci),cur:r.tot,H:Math.max(0,(nR(e)-1-r.rd)*18+(18-r.thru))}));const w=winProbs(list,1500);act.forEach((r,i)=>r.odds=oddsLabel(w[i]));}
+  const proj=!isQ(e)&&!cutDone&&rows.length>CUT?rows[CUT-1].tot:null,lastIn=proj===null?-1:rows.filter(r=>r.tot<=proj).length-1;
   const cutTxt=proj!==null?`Projected cut ${fmtPar(proj)}`:b.event&&b.event.cut_line!==null&&b.event.cut_line!==undefined?`Cut fell at ${fmtPar(b.event.cut_line)}`:'';
   ui.posMap=new Map(rows.map(r=>[r.p.id,r.p.cut?'Missed cut':`${r.pos} at ${fmtPar(r.tot)}`]));
   const live=!fin&&phase(e)==='live';
   const row=(r,cl)=>{const i=rows.indexOf(r),chip=proj!==null&&!r.p.cut&&(r.p.managed)?(i>lastIn?'<span class="chip out">Outside the cut</span>':'<span class="chip">Inside the cut</span>'):r.p.cut&&r.p.managed?'<span class="chip">Missed the cut</span>':'';
     const o0=r.p.odds0?oddsLabel(r.p.odds0):'';
-    return `<tr class="${r.p.mine?'me':r.p.managed?'mine':''}${cl?' cutline':''}"><td class="num">${r.pos}</td><td class="nm">${flagHTML(r.p.country)}${esc(r.p.name)}${r.p.managed?`<small class="sch">${esc(r.p.stable||'')}</small>`:isCol(e.tour)?`<small class="sch">${esc(r.p.college||'')}</small>`:''}${chip}${r.p.managed?` <button class="btn xs" data-act="watch" data-v="${r.p.id}">${ui.watch===r.p.id?'Watching':'Watch'}</button>`:''}</td><td class="num odds">${fin?(r.p.pay?`${fmt$(r.p.pay)}<small class="o0">${fmtPts(r.p.pts)} pts</small>`:''):`${r.odds||(r.p.cut?'':'–')}${o0?`<small class="o0">from ${o0}</small>`:''}`}</td><td class="num${r.tot<0?' under':''}">${fmtPar(r.tot)}</td><td class="num">${fin?r.strokes.reduce((a,c)=>a+c,0)||'':r.thru===18&&r.rd===R?'F':r.thru||'–'}</td></tr>`;};
+    return `<tr class="${r.p.mine?'me':r.p.managed?'mine':''}${cl?' cutline':''}"><td class="num">${r.pos}</td><td class="nm">${flagHTML(r.p.country)}${esc(r.p.name)}${r.p.managed?`<small class="sch">${esc(r.p.stable||'')}</small>`:isCol(e.tour)?`<small class="sch">${esc(r.p.college||'')}</small>`:''}${chip}${r.p.managed?` <button class="btn xs" data-act="watch" data-v="${r.p.id}">${ui.watch===r.p.id?'Watching':'Watch'}</button>`:''}</td><td class="num odds">${fin?(r.p.pay?`${fmt$(r.p.pay)}${r.p.pts?`<small class="o0">${fmtPts(r.p.pts)} pts</small>`:''}`:''):`${r.odds||(r.p.cut?'':'–')}${o0?`<small class="o0">from ${o0}</small>`:''}`}</td><td class="num${r.tot<0?' under':''}">${fmtPar(r.tot)}</td><td class="num">${fin?r.strokes.reduce((a,c)=>a+c,0)||'':r.thru===18&&r.rd===R?'F':r.thru||'–'}</td></tr>`;};
   const mineR=rows.filter(r=>r.p.mine),others=rows.filter(r=>r.p.managed&&!r.p.mine),full=ui.full,show=full?rows:rows.slice(0,10);
   const head=`<tr><th class="num">Pos</th><th>Golfer</th><th class="num">${fin?'Won':'Odds'}</th><th class="num">Par</th><th class="num">${fin?'Tot':'Thru'}</th></tr>`;
-  return `<section class="board"><div class="row"><h2>${fin?'Final leaderboard':live?`Round ${R+1}, live`:'Waiting for the first tee shot'}</h2><span class="chip cutchip">${cutTxt}</span></div>
+  return `<section class="board"><div class="row"><h2>${fin?'Final leaderboard':live?`Round ${R+1}${isQ(e)?' of '+nR(e):''}, live`:'Waiting for the first tee shot'}</h2><span class="chip cutchip">${cutTxt}</span></div>
  <table>${COLG}<thead>${head}</thead><tbody>
  ${mineR.length?`<tr class="sep"><td colspan="5">Your golfer${mineR.length>1?'s':''}</td></tr>${mineR.map(r=>row(r)).join('')}`:''}
  ${others.length?`<tr class="sep"><td colspan="5">Other managers’ golfers</td></tr>${others.map(r=>row(r)).join('')}`:''}
@@ -259,22 +263,27 @@ function boardHTML(b,e){const rows=boardRows(b,e),fin=e.status==='final',cutDone
  <div class="${full?'bscroll':''}" id="bscroll"><table>${COLG}<tbody>${show.map(r=>row(r,rows.indexOf(r)===lastIn)).join('')}</tbody></table></div>
  <div class="row"><span class="muted small">${live?'Updates every few seconds.':proj!==null?'':''}${proj!==null?' Dashed line: the projected cut. Top '+CUT+' and ties play the weekend.':''}</span><button class="btn sm" data-act="fullBoard">${full?'Show top 10':'Show all '+rows.length}</button></div></section>`;}
 /* the end of an event: the podium and the week in numbers */
+function bonusHTML(rows){const X=r=>r.p.extra||{},best=k=>{const m=Math.max(0,...rows.map(r=>X(r)[k]||0));return m?{m,w:rows.filter(r=>(X(r)[k]||0)===m)}:null;};
+  const gi=best('gir'),dr=best('drive'),aces=rows.filter(r=>X(r).aces);const nm=w=>w.map(r=>`${flagHTML(r.p.country)}${esc(r.p.name)}${r.p.managed?` <span class="muted small">(${esc(r.p.stable||'')})</span>`:''}`).join(', ');
+  return `${aces.length?`<div class="ace"><b>Hole in one!</b> ${nm(aces)}${aces.some(r=>r.p.managed)?` collects ${fmt$(S().qf_ace)}.`:'.'}</div>`:''}<div class="shop">${gi?`<div class="item"><b>Most greens hit: ${gi.m} of 36</b><span>${nm(gi.w)}</span><span class="tag hot">${fmt$(S().qf_bonus)}${gi.w.length>1?' shared':''}</span></div>`:''}${dr?`<div class="item"><b>Long drive: ${dr.m} yards</b><span>${nm(dr.w)}</span><span class="tag hot">${fmt$(S().qf_bonus)}${dr.w.length>1?' shared':''}</span></div>`:''}</div>`;}
 function podiumHTML(b,e){const rows=boardRows(b,e).filter(r=>r.p.pos_n).sort((a,c)=>a.p.pos_n-c.p.pos_n);if(!rows.length)return '';
   const par=COURSES[e.ci].par||COURSES[e.ci].holes.reduce((a,h)=>a+h.par,0),top=rows.slice(0,3),win=rows[0],second=rows[1];
   const margin=second?second.tot-win.tot:0,how=margin>0?`by ${margin} stroke${margin>1?'s':''}`:'in a playoff';
   const step=(r,place)=>r?`<div class="pod p${place}"><div class="pname">${flagHTML(r.p.country)}${esc(r.p.name)}</div><div class="psub">${r.p.managed?esc(r.p.stable||''):isCol(e.tour)?esc(r.p.college||''):'Tour regular'}</div><div class="pblock"><b>${r.p.pos}</b><span>${fmtPar(r.tot)}</span><small>${r.p.pay?fmt$(r.p.pay):''}</small></div></div>`:'';
-  let low=null,best4=null;rows.forEach(r=>(r.p.scores||[]).forEach((rd,i)=>{if(rd.length!==18)return;const s=sum(rd);if(!low||s<low.s)low={r,s,i};if(i===3&&(!best4||s<best4.s))best4={r,s};}));
+  let low=null,best4=null;rows.forEach(r=>(r.p.scores||[]).forEach((rd,i)=>{if(rd.length!==18)return;const s=sum(rd);if(!low||s<low.s)low={r,s,i};if(i===nR(e)-1&&(!best4||s<best4.s))best4={r,s};}));
+  const bon=isQ(e)?bonusHTML(rows):'';
   const mineR=rows.filter(r=>r.p.mine),oth=rows.filter(r=>r.p.managed&&!r.p.mine),cutM=boardRows(b,e).filter(r=>r.p.managed&&r.p.cut);
   const line=r=>`<div class="item"><b>${flagHTML(r.p.country)}${esc(r.p.name)}</b><span>${r.p.cut?'Missed the cut':`Finished ${r.p.pos} at ${fmtPar(r.tot)}`}${r.p.odds0&&!r.p.cut?`, starting at ${oddsLabel(r.p.odds0)}`:''}.</span>${r.p.pay||r.p.pts?`<span class="tag hot">${r.p.pay?fmt$(r.p.pay):''}${r.p.pts?` · ${fmtPts(r.p.pts)} pts`:''}</span>`:''}</div>`;
   const allMine=boardRows(b,e).filter(r=>r.p.mine).map(r=>Object.assign(r,{tot:r.tot})),allOth=boardRows(b,e).filter(r=>r.p.managed&&!r.p.mine);
   return `<section class="podium-wrap"><p class="eyebrow">Final</p><h2 class="champ">${flagHTML(win.p.country)}${esc(win.p.name)} wins ${how}</h2>
  <p class="lede">${fmtPar(win.tot)} for the week${win.p.odds0?`, from ${oddsLabel(win.p.odds0)} at the start`:''}.${win.p.pay?` He takes ${fmt$(win.p.pay)}${win.p.pts?` and ${fmtPts(win.p.pts)} points`:''}.`:''}</p>
- <div class="podium">${step(top[1],2)}${step(top[0],1)}${step(top[2],3)}</div>
+ <div class="podium">${step(top[1],2)}${step(top[0],1)}${step(top[2],3)}</div>${bon}
  <div class="stats">${low?`<div><b>${fmtPar(low.s-par)}</b><span>Low round: ${esc(low.r.p.name)}, R${low.i+1}</span></div>`:''}${best4?`<div><b>${fmtPar(best4.s-par)}</b><span>Best final round: ${esc(best4.r.p.name)}</span></div>`:''}${b.event.cut_line!==null&&b.event.cut_line!==undefined?`<div><b>${fmtPar(b.event.cut_line)}</b><span>Cut line</span></div>`:''}</div>
  ${allMine.length?`<h3>Your golfers</h3><div class="shop">${allMine.sort((a,c)=>(a.p.pos_n||999)-(c.p.pos_n||999)).map(line).join('')}</div>`:''}
  ${allOth.length?`<h3>Other managers</h3><div class="shop">${allOth.sort((a,c)=>(a.p.pos_n||999)-(c.p.pos_n||999)).map(line).join('')}</div>`:''}
 </section>`;}
 async function loadPreview(e){
+  if(isQ(e)){const en=await SB.from('entries').select('golfer_id').eq('event_id',e.id).eq('status','in');const ids=(en.data||[]).map(x=>x.golfer_id);const gs=ids.length?await SB.from('golfers').select('id,name,country,college,stable,manager_id,sk,yr,tour').in('id',ids):{data:[]};const rows=(gs.data||[]).map(g=>({g,how:'Entered'}));rows.sort((a,b)=>ovr(b.g.sk)-ovr(a.g.sk));ui.preview={eid:e.id,rows};return;}
   const [gs,en]=await Promise.all([SB.from('golfers').select('id,name,country,college,stable,manager_id,sk,yr,enter_rule').eq('tour',e.tour).eq('retired',false).not('manager_id','is',null),SB.from('entries').select('golfer_id,status').eq('event_id',e.id)]);
   const st=new Map((en.data||[]).map(x=>[x.golfer_id,x.status]));
   const rows=(gs.data||[]).map(g=>{const s=st.get(g.id),auto=e.test||g.enter_rule==='all'||(g.enter_rule==='signature'&&['Signature','Finale'].includes(e.type));return{g,how:s==='in'?'Entered':s==='out'?null:auto?'Entered automatically':null};}).filter(r=>r.how);
@@ -443,7 +452,7 @@ document.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');i
   if(a==='retire'){ui.confirm=null;return act('retire',{id:g.id});}
   if(a==='fee')return act('fee',{id:g.id,price:+val('feeIn')});
   if(a==='rename')return act('rename',{name:val('stName')});
-  if(a==='aset'){let raw=val('set_'+v),x;const d=DEFAULTS[v];x=Array.isArray(d)?raw.split(/[ ,]+/).filter(Boolean).map(Number):typeof d==='number'?Number(raw):raw;if(Array.isArray(x)?x.some(isNaN):typeof x==='number'&&isNaN(x)){ui.err='That needs a number.';return render();}return act('adminSet',{key:v,value:x},()=>{ui.msg='Saved.';});}
+  if(a==='aset'){let raw=val('set_'+v),x;const d=DEFAULTS[v];x=Array.isArray(d)?raw.split(/[ ,]+/).filter(Boolean).map(Number):typeof d==='number'?Number(raw):typeof d==='boolean'?/^(true|yes|on|1)$/i.test(raw.trim()):raw;if(Array.isArray(x)?x.some(isNaN):typeof x==='number'&&isNaN(x)){ui.err='That needs a number.';return render();}return act('adminSet',{key:v,value:x},()=>{ui.msg='Saved.';});}
   if(a==='atest')return act('adminTest',{tour:val('tTour'),mins:+val('tMin')},()=>{ui.msg='Test event created. It appears on the Events page.';});
   if(a==='alog')return act('adminLog',{},r=>{ui.log=r.log;});
 });

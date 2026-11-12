@@ -139,7 +139,7 @@ const A: Record<string, (c: any) => Promise<any>> = {
     const { data: ev } = await sb.from('events').select('*').eq('id', b.event).maybeSingle();
     if (!ev || ev.status !== 'open') no('Entries are closed for that event.');
     if (Date.parse(ev.starts_at) - s.deadline_min * 60e3 <= Date.now()) no('Entries are closed for that event.');
-    if (ev.tour !== g.tour) no(`${g.name} doesn't play on that tour.`);
+    if (ev.tour !== 'qf' && ev.tour !== g.tour) no(`${g.name} doesn't play on that tour.`);
     const { data: ex } = await sb.from('entries').select('*').eq('event_id', ev.id).eq('golfer_id', g.id).maybeSingle();
     if (ex?.status === 'in') return {};
     const fee = ev.test ? 0 : ev.fee;

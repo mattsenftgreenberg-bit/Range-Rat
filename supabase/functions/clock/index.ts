@@ -24,6 +24,7 @@ Deno.serve(async (req) => {
   try {
     const s = await settings();
     await ensureWorld(s, done);
+    await scheduleQuick(s, done);
     await lockDue(s, done);
     await simNext(s, done); // one round per call keeps each call well inside its time limit
     await finalizeDue(s, done);
@@ -107,11 +108,66 @@ async function scheduleSeason(s: any, season: number, start: string, end: string
   if (rows.length) { const { error } = await sb.from('events').insert(rows); if (error) throw new Error('schedule: ' + error.message); }
 }
 
+// ---------- Quick-Fire Opens ----------
+// A two-round, no-cut event every `qf_every_min` minutes, all day. Open to any golfer, entered by hand only.
+const QF = 'qf';
+async function scheduleQuick(s: any, done: string[]) {
+  if (!s.qf_on) return;
+  const step = s.qf_every_min * 60e3, first = Math.ceil((Date.now() + (s.deadline_min + 1) * 60e3) / step) * step;
+  const want = [0, 1, 2].map((k) => new Date(first + k * step).toISOString());
+  const { data: have } = await sb.from('events').select('starts_at').eq('tour', QF).gte('starts_at', want[0]);
+  const got = new Set((have || []).map((e: any) => new Date(e.starts_at).toISOString()));
+  const { data: w } = await sb.from('world').select('season').maybeSingle();
+  const rows = want.filter((at) => !got.has(at)).map((at) => ({
+    tour: QF, season: w?.season || 1, week: 0, name: 'Quick-Fire Open', ci: Math.floor(Math.random() * E.COURSES.length), type: 'Quick-Fire',
+    purse: s.qf_base, fee: s.qf_fee, pm: 0, starts_at: at, round_min: s.round_min, rounds: 2,
+  }));
+  if (rows.length) { await sb.from('events').upsert(rows, { onConflict: 'tour,starts_at', ignoreDuplicates: true }); done.push(`scheduled ${rows.length} Quick-Fire`); }
+}
+async function lockQuick(ev: any, s: any, done: string[]) {
+  const { data: ents } = await sb.from('entries').select('golfer_id').eq('event_id', ev.id).eq('status', 'in');
+  const ids = (ents || []).map((e: any) => e.golfer_id);
+  if (!ids.length) { await sb.from('events').delete().eq('id', ev.id); done.push('Quick-Fire skipped: nobody entered'); return; }
+  const { data: w } = await sb.from('world').select('season').single();
+  // the rest of the field: tour regulars from every tour
+  const { data: pool } = await sb.from('golfers').select('id,tour,pool_season').eq('career', false).eq('retired', false).is('manager_id', null);
+  const reg = shuffle((pool || []).filter((g: any) => !E.isCol(g.tour) || g.pool_season === w!.season));
+  const fl = ids.map((id: string) => ({ id, managed: true })).concat(reg.slice(0, Math.max(0, E.FIELD - ids.length)).map((g: any) => ({ id: g.id, managed: false })));
+  const rs = new Map<string, number>();
+  for (let i = 0; i < fl.length; i += 60) {
+    const { data: gs } = await sb.from('golfers').select('id,sk,eq,conf,fatigue').in('id', fl.slice(i, i + 60).map((f) => f.id));
+    for (const g of gs || []) rs.set(g.id, E.ratingFor(g, ev.ci));
+  }
+  const probs = E.winProbs(fl.map((f) => ({ r: rs.get(f.id) ?? 60, cur: 0, H: 36 })), 4000);
+  const { error } = await sb.from('event_players').insert(fl.map((f, i) => ({ event_id: ev.id, golfer_id: f.id, managed: f.managed, slot0: Math.floor(Math.random() * 3), odds0: probs[i] })));
+  if (error) throw new Error('quick field: ' + error.message);
+  const purse = s.qf_base + s.qf_add * ids.length;
+  await sb.from('events').update({ field: fl.length, purse }).eq('id', ev.id);
+  done.push(`locked Quick-Fire: ${ids.length} entered, pot ${purse}`);
+}
+// Greens in regulation, the longest drive and aces, read from one hole's shots.
+function holeExtras(res: any, par: number) {
+  let n = 0, reached = 99, drive = 0;
+  for (let i = 0; i < res.shots.length; i++) {
+    const x = res.shots[i]; if (x.k === 'pick') continue;
+    if (x.k === 'putt') { reached = n; break; }
+    n++;
+    if (x.holed) { reached = n; break; }
+  }
+  const t0 = res.shots[0];
+  if (par >= 4 && t0 && t0.k === 'full' && !(res.shots[1] && res.shots[1].k === 'drop')) drive = Math.round(Math.hypot(t0.to[0] - t0.from[0], t0.to[1] - t0.from[1]));
+  return { gir: reached <= par - 2 ? 1 : 0, drive, ace: res.score === 1 ? 1 : 0 };
+}
+
 // ---------- events ----------
 async function lockDue(s: any, done: string[]) {
   const cutoff = new Date(Date.now() + s.deadline_min * 60e3).toISOString();
   const { data: evs } = await sb.from('events').select('*').eq('status', 'open').lte('starts_at', cutoff).order('starts_at').limit(3);
-  for (const ev of evs || []) await lockEvent(ev, done);
+  for (const ev of evs || []) await (ev.tour === QF ? lockEventQ(ev, s, done) : lockEvent(ev, done));
+}
+async function lockEventQ(ev: any, s: any, done: string[]) {
+  const { data: claimed } = await sb.from('events').update({ status: 'locked' }).eq('id', ev.id).eq('status', 'open').select('id');
+  if (claimed?.length) await lockQuick(ev, s, done);
 }
 async function lockEvent(ev: any, done: string[]) {
   const { data: claimed } = await sb.from('events').update({ status: 'locked' }).eq('id', ev.id).eq('status', 'open').select('id');
@@ -167,25 +223,27 @@ async function loadField(ev: any) {
   return (eps || []).map((ep: any) => { const g: any = { ...gm.get(ep.golfer_id) }, x: any = sm.get(ep.golfer_id) || {}; g.peak = x.peak ?? 1; g.agg = x.agg ?? 0; g.ce = x.ce; return { ep, g }; });
 }
 async function simNext(s: any, done: string[]) {
-  const { data: evs } = await sb.from('events').select('*').eq('status', 'locked').lt('rounds_done', 4).order('starts_at').limit(1);
-  const ev = evs?.[0]; if (!ev) return false;
+  const { data: evs } = await sb.from('events').select('*').eq('status', 'locked').order('starts_at').limit(8);
+  const ev = (evs || []).find((e: any) => e.rounds_done < (e.rounds || 4)); if (!ev) return false;
   await simRound(ev); done.push(`played ${ev.name} round ${ev.rounds_done + 1}`); return true;
 }
 const r1 = (v: number) => Math.round(v * 10) / 10;
 async function simRound(ev: any) {
   const r = ev.rounds_done, F = await loadField(ev);
   const eng: any = {
-    ci: ev.ci, course: E.COURSES[ev.ci], round: r, hole: 0, cutLine: ev.cut_line,
+    ci: ev.ci, course: E.COURSES[ev.ci], round: r, hole: 0, cutLine: ev.cut_line, noCut: ev.tour === QF, last: (ev.rounds || 4) - 1,
     players: F.map(({ ep, g }: any) => ({ g, ep, managed: ep.managed, evPar: ep.ev_par, rounds: [], cut: ep.cut, weekForm: ep.week_form, slot0: ep.slot0, slot: ep.slot ?? undefined, st: r ? { mood: ep.mood } : undefined })),
   };
   if (r === 0) eng.players.forEach((p: any) => (p.weekForm = E.gauss() * (6 - p.g.sk.mental * 0.035) * 0.9));
   E.beginRound(eng);
   const act = eng.players.filter((p: any) => !p.cut), card = new Map<any, number[]>(act.map((p: any) => [p, [] as number[]])), shots: any[] = [];
+  const quick = ev.tour === QF, ext = new Map<any, any>(eng.players.map((p: any) => [p, { gir: 0, drive: 0, aces: 0, ...(p.ep.extra || {}) }]));
   for (let h = 0; h < E.HOLES; h++) {
     eng.hole = h;
     const out = E.simHole(eng);
     for (const [p, res] of out as Map<any, any>) {
       card.get(p)!.push(res.score);
+      if (quick) { const x = holeExtras(res, eng.course.holes[h].par), o = ext.get(p); o.gir += x.gir; o.aces += x.ace; o.drive = Math.max(o.drive, x.drive); }
       if (p.managed) shots.push({
         event_id: ev.id, golfer_id: p.g.id, round: r, hole: h, mood: r1(p.st.mood), run: p.st.run,
         shots: res.shots.map((x: any) => ({ k: x.k, from: x.from.map(r1), to: x.to.map(r1), text: x.text, holed: !!x.holed })),
@@ -198,6 +256,7 @@ async function simRound(ev: any) {
     event_id: ev.id, golfer_id: p.g.id, managed: p.managed, slot0: p.slot0, slot: p.slot ?? null, week_form: p.weekForm,
     mood: p.st ? p.st.mood : p.ep.mood, ev_par: p.evPar, cut: p.cut,
     scores: card.has(p) ? (p.ep.scores || []).concat([card.get(p)]) : p.ep.scores,
+    ...(quick ? { extra: ext.get(p) } : {}),
   }));
   const { error } = await sb.from('event_players').upsert(rows);
   if (error) throw new Error('round save: ' + error.message);
@@ -205,9 +264,9 @@ async function simRound(ev: any) {
   await sb.from('events').update({ rounds_done: r + 1, cut_line: r === 1 ? eng.cutLine : ev.cut_line, meta: { ...ev.meta, wind: [...(ev.meta?.wind || []), eng.wind] } }).eq('id', ev.id);
 }
 async function finalizeDue(s: any, done: string[]) {
-  const { data: evs } = await sb.from('events').select('*').eq('status', 'locked').eq('rounds_done', 4).lte('starts_at', new Date().toISOString()).order('starts_at').limit(6);
-  const due = (evs || []).filter((ev: any) => Date.parse(ev.starts_at) + 4 * Number(ev.round_min || s.round_min) * 60e3 <= Date.now()).slice(0, 2);
-  for (const ev of due) await finalize(ev, s, done);
+  const { data: evs } = await sb.from('events').select('*').eq('status', 'locked').lte('starts_at', new Date().toISOString()).order('starts_at').limit(10);
+  const due = (evs || []).filter((ev: any) => ev.rounds_done >= (ev.rounds || 4) && Date.parse(ev.starts_at) + (ev.rounds || 4) * Number(ev.round_min || s.round_min) * 60e3 <= Date.now()).slice(0, 2);
+  for (const ev of due) await (ev.tour === QF ? finalizeQuick(ev, s, done) : finalize(ev, s, done));
 }
 async function finalize(ev: any, s: any, done: string[]) {
   const { data: claimed } = await sb.from('events').update({ status: 'final' }).eq('id', ev.id).eq('status', 'locked').select('id');
@@ -256,6 +315,42 @@ async function finalize(ev: any, s: any, done: string[]) {
   }
   for (const mid in news) await addNews(mid, news[mid]);
   done.push(`final ${ev.name}: won by ${win?.g?.name}`);
+}
+
+// A Quick-Fire Open pays the top third of the field, plus bonuses. No points, no stamina, no effect on skills or career records.
+async function finalizeQuick(ev: any, s: any, done: string[]) {
+  const { data: claimed } = await sb.from('events').update({ status: 'final' }).eq('id', ev.id).eq('status', 'locked').select('id');
+  if (!claimed?.length) return;
+  const F = await loadField(ev), last = (ev.rounds || 2) - 1;
+  const paid = Math.max(1, Math.floor(F.length / 3)), base = E.PAYF.slice(0, paid), tot = sumA(base);
+  const eng: any = { ci: ev.ci, course: E.COURSES[ev.ci], round: last, last, noCut: true, hole: 0, wind: (ev.meta?.wind || []).at(-1) || { mph: 8, dir: 0 }, payf: base.map((x: number) => x / tot).concat(Array(F.length).fill(0)) };
+  eng.players = F.map(({ ep, g }: any) => {
+    const p: any = { g, ep, managed: ep.managed, evPar: ep.ev_par, rounds: (ep.scores || []).map(sumA), cut: false, weekForm: ep.week_form, slot: ep.slot ?? 1, x: ep.extra || { gir: 0, drive: 0, aces: 0 } };
+    p.st = E.initState(g, p.slot, (ep.mood || 0) * 0.3, ep.week_form);
+    return p;
+  });
+  E.finishEvent(eng);
+  // bonuses: most greens in regulation and the longest drive (ties share), and every ace
+  const top = (k: string) => { const m = Math.max(...eng.players.map((p: any) => p.x[k] || 0)); return m > 0 ? eng.players.filter((p: any) => (p.x[k] || 0) === m) : []; };
+  const gw = top('gir'), dw = top('drive'), bonus = new Map<any, string[]>();
+  for (const p of eng.players) { p.pay = Math.round((p.payf || 0) * ev.purse); p.bon = 0; }
+  const give = (p: any, amt: number, why: string) => { p.bon += amt; (bonus.get(p) || bonus.set(p, []).get(p))!.push(why); };
+  gw.forEach((p: any) => give(p, Math.round(s.qf_bonus / gw.length), `most greens hit (${p.x.gir})`));
+  dw.forEach((p: any) => give(p, Math.round(s.qf_bonus / dw.length), `long drive (${p.x.drive} yards)`));
+  eng.players.forEach((p: any) => { if (p.x.aces) give(p, s.qf_ace * p.x.aces, p.x.aces > 1 ? `${p.x.aces} holes in one` : 'a hole in one'); });
+  await sb.from('event_players').upsert(eng.players.map((p: any) => ({ event_id: ev.id, golfer_id: p.g.id, pos: p.pos, pos_n: p.posN, pts: 0, pay: p.pay + p.bon, won: !!p.won, extra: { ...p.x, prize: p.pay, bonus: p.bon, why: bonus.get(p) || [] } })));
+  await sb.from('events').update({ meta: { ...ev.meta, bonus: { gir: gw.map((p: any) => p.g.id), drive: dw.map((p: any) => p.g.id), aces: eng.players.filter((p: any) => p.x.aces).map((p: any) => p.g.id) } } }).eq('id', ev.id);
+  const news: Record<string, string[]> = {};
+  for (const p of eng.players) {
+    const g = p.g; if (!g.manager_id) continue;
+    const total = p.pay + p.bon, why = bonus.get(p);
+    if (total > 0) await cash(g.manager_id, total, 'prize', `${g.name}: ${p.pos} at the Quick-Fire Open${p.bon ? ' plus bonuses' : ''}`);
+    const S = { ...(g.stats || {}) }; S.qf_ev = (S.qf_ev || 0) + 1; S.qf_wins = (S.qf_wins || 0) + (p.won ? 1 : 0); S.qf_earn = (S.qf_earn || 0) + total; S.qf_aces = (S.qf_aces || 0) + (p.x.aces || 0);
+    await sb.from('golfers').update({ stats: S }).eq('id', g.id);
+    (news[g.manager_id] ??= []).push(`${g.name} ${p.won ? 'won' : 'finished ' + p.pos + ' in'} the Quick-Fire Open${total ? `: ${fmt$(total)}` : ''}.${why ? ` Bonus for ${why.join(' and ')}.` : ''}`);
+  }
+  for (const mid in news) await addNews(mid, news[mid]);
+  done.push(`final Quick-Fire: won by ${eng.order[0]?.g?.name}`);
 }
 
 // Coaching ratings are public once a golfer coaches; keep a copy on the coaching record.

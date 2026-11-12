@@ -13,6 +13,7 @@ export const DEFAULTS: Record<string, any> = {
   deadline_min: 5, round_min: 7.5, events_per_season: 8, hours: [18, 19, 20, 21],
   gain_mult: 1, rust_per_day: 0.025, recovery_per_day: 15, event_fatigue: 20, train_fatigue: 15,
   purse_mult: 1, fee_mult: 1, sale_chance_mult: 1, coach_age_yr: 15,
+  qf_on: true, qf_every_min: 20, qf_fee: 200, qf_base: 20000, qf_add: 200, qf_bonus: 1000, qf_ace: 1000000,
 };
 export async function settings() {
   const { data } = await sb.from('settings').select('key,value');

@@ -310,16 +310,16 @@ function beginRound(ev){
 }
 function simHole(ev){
   const h=ev.course.holes[ev.hole],act=ev.players.filter(p=>!p.cut),tots=act.map(p=>evTot(ev,p)),lead=Math.min(...tots);
-  let cl=null;if(ev.round===1){const s=tots.slice().sort((a,b)=>a-b);cl=s[Math.min(s.length,CUT)-1];}
-  const out=new Map(),late=ev.round===3&&ev.hole>=9,second=late?tots.slice().sort((a,b)=>a-b)[1]:0;
-  act.forEach((p,i)=>{const gap=tots[i]-lead,sit=!late?null:gap>=2&&gap<=6?'chase':gap===0&&second-lead>=2?'protect':null,pressure=(ev.round===3&&ev.hole>=9&&tots[i]-lead<=3)||(cl!==null&&ev.hole>=11&&Math.abs(tots[i]-cl)<=1);
+  const fin=ev.last??3;let cl=null;if(ev.round===1&&!ev.noCut){const s=tots.slice().sort((a,b)=>a-b);cl=s[Math.min(s.length,CUT)-1];}
+  const out=new Map(),late=ev.round===fin&&ev.hole>=9,second=late?tots.slice().sort((a,b)=>a-b)[1]:0;
+  act.forEach((p,i)=>{const gap=tots[i]-lead,sit=!late?null:gap>=2&&gap<=6?'chase':gap===0&&second-lead>=2?'protect':null,pressure=(ev.round===fin&&ev.hole>=9&&tots[i]-lead<=3)||(cl!==null&&ev.hole>=11&&Math.abs(tots[i]-cl)<=1);
     const res=playHole(p.g,p.st,h,{wind:windOf(ev,p),pressure,sit});afterHole(p.g,p.st,h,res);out.set(p,res);});
   return out;
 }
 function endRound(ev){
   const act=ev.players.filter(p=>!p.cut);
   act.forEach(p=>{p.evPar+=p.st.toPar;p.rounds.push(p.st.total);});ev.live=false;
-  if(ev.round===1){const s=act.map(p=>p.evPar).sort((a,b)=>a-b);ev.cutLine=s[Math.min(s.length,CUT)-1];act.forEach(p=>{if(p.evPar>ev.cutLine)p.cut=true;});}
+  if(ev.round===1&&!ev.noCut){const s=act.map(p=>p.evPar).sort((a,b)=>a-b);ev.cutLine=s[Math.min(s.length,CUT)-1];act.forEach(p=>{if(p.evPar>ev.cutLine)p.cut=true;});}
 }
 function playRound(ev){for(;ev.hole<HOLES;ev.hole++)simHole(ev);endRound(ev);}
 function finishEvent(ev){
@@ -328,9 +328,9 @@ function finishEvent(ev){
     for(let i=0;i<10&&t.length>1;i++){const sc=t.map(p=>playHole(p.g,p.st,h,{wind:windOf(ev,p),pressure:true}).score),m=Math.min(...sc);t=t.filter((p,j)=>sc[j]===m);}
     t[0].won=true;ev.playoff={winner:t[0],losers:tied.filter(p=>p!==t[0])};}
   else tied[0].won=true;
-  const order=act.slice().sort((a,b)=>(b.won?1:0)-(a.won?1:0)||a.evPar-b.evPar),last=PAYF[PAYF.length-1];
+  const PF=ev.payf||PAYF,order=act.slice().sort((a,b)=>(b.won?1:0)-(a.won?1:0)||a.evPar-b.evPar),last=ev.payf?0:PAYF[PAYF.length-1];
   let i=0;while(i<order.length){let j=i;if(!order[i].won)while(j+1<order.length&&order[j+1].evPar===order[i].evPar)j++;
-    const k=j-i+1;let s=0,f=0;for(let q=i;q<=j;q++){s+=PTS[q]||3;f+=PAYF[q]||last;}
+    const k=j-i+1;let s=0,f=0;for(let q=i;q<=j;q++){s+=PTS[q]||3;f+=PF[q]||last;}
     for(let q=i;q<=j;q++){order[q].posN=i+1;order[q].pos=(k>1?'T':'')+(i+1);order[q].pts=Math.round(s/k*10)/10;order[q].payf=f/k;}i=j+1;}
   ev.players.filter(p=>p.cut).forEach(p=>{p.pos='MC';p.posN=999;p.pts=0;p.payf=0;});
   ev.order=order;ev.done=true;return order;
