@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
     let me: any = null;
     if (body.action !== 'join') {
       const { data } = await sb.from('managers').select('*').eq('id', uid).maybeSingle();
-      if (!data) no('Set up your stable first.');
+      if (!data) no('Set up your roster first.');
       me = data;
     }
     if (String(body.action).startsWith('admin') && !me.is_admin) no('Admins only.');
@@ -57,14 +57,14 @@ const A: Record<string, (c: any) => Promise<any>> = {
   async join({ uid, b, s }) {
     const { data: ex } = await sb.from('managers').select('id').eq('id', uid).maybeSingle();
     if (ex) return {};
-    const name = clean(b.name, 30) || 'New Stable';
+    const name = clean(b.name, 30) || 'New Roster';
     const { error } = await sb.from('managers').insert({ id: uid, name, cash: s.start_cash, news: [{ t: `Welcome to Range Rat. You have ${fmt$(s.start_cash)} to start. Scout a junior to sign your first golfer.`, at: new Date().toISOString() }] });
     if (error) no('Could not set up your stable.');
     await newScout(uid, 3);
     return {};
   },
   async rename({ uid, b }) {
-    const name = clean(b.name, 30); if (!name) no('Give the stable a name.');
+    const name = clean(b.name, 30); if (!name) no('Give the roster a name.');
     await sb.from('managers').update({ name }).eq('id', uid);
     await sb.from('golfers').update({ stable: name }).eq('manager_id', uid);
   },
@@ -74,7 +74,7 @@ const A: Record<string, (c: any) => Promise<any>> = {
     return { prospect: await newScout(uid, me.rerolls - 1) };
   },
   async sign({ uid, me, b, s }) {
-    if ((await activeCount(uid)) >= s.max_golfers) no(`Your stable is full at ${s.max_golfers} active golfers.`);
+    if ((await activeCount(uid)) >= s.max_golfers) no(`Your roster is full at ${s.max_golfers} active golfers.`);
     const { data: sec } = await sb.from('manager_secrets').select('prospect').eq('id', uid).maybeSingle();
     const p = sec?.prospect; if (!p) no('Scout a junior first.');
     const college = E.COLLEGES.includes(b.college) ? b.college : E.pick(E.COLLEGES);
@@ -178,7 +178,7 @@ const A: Record<string, (c: any) => Promise<any>> = {
     return { msg: `${rival} takes ${g.name} for ${fmt$(price)}.` };
   },
   async buy({ uid, b, s }) {
-    if ((await activeCount(uid)) >= s.max_golfers) no(`Your stable is full at ${s.max_golfers} active golfers.`);
+    if ((await activeCount(uid)) >= s.max_golfers) no(`Your roster is full at ${s.max_golfers} active golfers.`);
     const { data: g } = await sb.from('golfers').select('id,name,manager_id,ask').eq('id', b.id).maybeSingle();
     if (!g?.ask) no("He's no longer for sale.");
     if (g.manager_id === uid) no("He's already yours.");
