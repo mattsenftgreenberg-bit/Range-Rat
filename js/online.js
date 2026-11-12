@@ -30,7 +30,7 @@ const umbOf=k=>'smlx'.split('').find(u=>SUB[u].includes(k));
    Everything here reads the shared tables (read-only for players) and sends every change to the `game` server function. */
 const SB=window.supabase&&window.RR_CONFIG?window.supabase.createClient(RR_CONFIG.url,RR_CONFIG.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
 const FN=RR_CONFIG.url+'/functions/v1/game';
-const DEFAULTS={start_cash:25000,max_golfers:8,sessions_per_day:1,lessons_per_day:5,coach_max:1.5,deadline_min:5,round_min:15,events_per_season:8,hours:[18,19,20,21],gain_mult:1,rust_per_day:.025,recovery_per_day:15,event_fatigue:20,train_fatigue:15,purse_mult:1,fee_mult:1,sale_chance_mult:1,coach_age_yr:15};
+const DEFAULTS={start_cash:25000,max_golfers:8,sessions_per_day:1,lessons_per_day:5,coach_max:1.5,deadline_min:5,round_min:7.5,events_per_season:8,hours:[18,19,20,21],gain_mult:1,rust_per_day:.025,recovery_per_day:15,event_fatigue:20,train_fatigue:15,purse_mult:1,fee_mult:1,sale_chance_mult:1,coach_age_yr:15};
 const SETN={start_cash:'Starting money for a new stable',max_golfers:'Most active golfers per stable',sessions_per_day:'Range sessions per golfer per day',lessons_per_day:'Lessons each coach gives per day',coach_max:'Best coach multiplier',deadline_min:'Entry deadline, minutes before the start',round_min:'Minutes per round',events_per_season:'Events per tour per month',hours:'Start hours (New York time)',gain_mult:'Training gain multiplier',rust_per_day:'Rust per skipped day',recovery_per_day:'Fatigue recovered per day',event_fatigue:'Fatigue from playing an event',train_fatigue:'Fatigue from a range session',purse_mult:'Purse multiplier (new events)',fee_mult:'Entry fee multiplier (new events)',sale_chance_mult:'How keen rival coaches are to buy',coach_age_yr:'Career year a golfer may retire to coach'};
 const ui={view:'loading',sel:null,msg:'',err:'',busy:false,auth:{mode:'in',email:'',msg:'',err:false,busy:false},tour:null,ev:null,watch:null,board:null,feed:null,pros:{name:'',country:'US',college:'',color:0},full:false};
 const D={user:null,me:null,golfers:[],events:[],entries:[],world:null,settings:{...DEFAULTS},coaches:[],market:[],names:{}};
@@ -45,7 +45,9 @@ const etFmt=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',weekday
 const when=iso=>etFmt.format(new Date(iso))+' ET';
 function until(iso){let s=Math.round((Date.parse(iso)-Date.now())/1000);if(s<=0)return'now';const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d?`${d}d ${h}h`:h?`${h}h ${m}m`:m?`${m}m ${s%60}s`:`${s}s`;}
 const deadline=e=>Date.parse(e.starts_at)-S().deadline_min*60e3;
-const endsAt=e=>Date.parse(e.starts_at)+4*S().round_min*60e3;
+const rmin=e=>Number(e&&e.round_min)||S().round_min;
+const endsAt=e=>Date.parse(e.starts_at)+4*rmin(e)*60e3;
+const evNow=()=>{const d=D.events.find(x=>x.id===ui.ev),s=ui.board&&ui.board.event&&ui.board.event.id===ui.ev?ui.board.event:null;return d||s?Object.assign({},d||{},s||{}):null;};
 function phase(e){if(e.status==='final')return'final';const now=Date.now();if(now<deadline(e))return'open';if(now<Date.parse(e.starts_at))return'closed';return'live';}
 const entryOf=(e,g)=>D.entries.find(x=>x.event_id===e.id&&x.golfer_id===g.id);
 function inField(e,g){const x=entryOf(e,g);if(x)return x.status==='in';return e.test||g.enter_rule==='all'||(g.enter_rule==='signature'&&['Signature','Finale'].includes(e.type));}
@@ -78,7 +80,7 @@ async function load(){
   const [me,gs,ev,en,w,st,co,mk]=await Promise.all([
     SB.from('managers').select('*').eq('id',uid).maybeSingle(),
     SB.from('golfers').select('*').eq('manager_id',uid).order('created_at'),
-    SB.from('events').select('id,tour,season,week,name,ci,type,purse,fee,pm,starts_at,status,rounds_done,field,test').gte('starts_at',new Date(Date.now()-3*864e5).toISOString()).order('starts_at').limit(400),
+    SB.from('events').select('id,tour,season,week,name,ci,type,purse,fee,pm,starts_at,status,rounds_done,field,test,round_min').gte('starts_at',new Date(Date.now()-3*864e5).toISOString()).order('starts_at').limit(400),
     SB.from('entries').select('*').eq('manager_id',uid),
     SB.from('world').select('*').maybeSingle(),
     SB.from('settings').select('key,value'),
@@ -174,12 +176,12 @@ events(){
   const t=ui.tour||'all',list=D.events.filter(e=>t==='all'||e.tour===t);
   const live=list.filter(e=>['live','closed'].includes(phase(e))&&e.status!=='final'),next=list.filter(e=>phase(e)==='open').slice(0,12),done=list.filter(e=>e.status==='final').reverse().slice(0,12);
   const row=e=>`<div class="item"><b>${esc(e.name)}${e.test?' <span class="tag">Test</span>':''}</b><span>${T(e.tour).name}. ${COURSES[e.ci].name}. ${when(e.starts_at)}. Purse ${fmt$(e.purse)}${e.fee?`, entry ${fmt$(e.fee)}`:''}.</span><span>${mineIn(e)}</span><button class="btn sm" data-act="board" data-v="${e.id}">${e.status==='final'?'Results':phase(e)==='open'?'Field':'Watch'}</button></div>`;
-  return `<section class="intro"><p class="eyebrow">Season ${D.world?D.world.season:1}${D.world?`, through ${new Date(D.world.season_end+'T12:00:00Z').toLocaleDateString('en-US',{month:'long',day:'numeric'})}`:''}</p><h1>Events</h1><p class="lede">Every event starts on the clock. Each round takes ${S().round_min} minutes, one hole every ${Math.round(S().round_min*60/18)} seconds, and everyone watches the same holes at the same time.</p></section>
+  return `<section class="intro"><p class="eyebrow">Season ${D.world?D.world.season:1}${D.world?`, through ${new Date(D.world.season_end+'T12:00:00Z').toLocaleDateString('en-US',{month:'long',day:'numeric'})}`:''}</p><h1>Events</h1><p class="lede">Every event starts on the clock and takes about ${Math.round(4*S().round_min)} minutes: four rounds, one hole every ${Math.round(S().round_min*60/18)} seconds. Everyone watches the same holes at the same time.</p></section>
 <section class="sec"><div class="row" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn sm${t==='all'?' on':''}" data-act="tour" data-v="all">All tours</button>${tours.map(x=>`<button class="btn sm${t===x?' on':''}" data-act="tour" data-v="${x}">${T(x).name}</button>`).join('')}</div></section>
 ${live.length?`<section class="sec"><h2>On the course now</h2><div class="shop">${live.map(row).join('')}</div></section>`:''}
 <section class="sec"><h2>Coming up</h2>${next.length?`<div class="shop">${next.map(row).join('')}</div>`:'<p class="muted">Nothing scheduled.</p>'}</section>
 ${done.length?`<section class="sec"><h2>Finished</h2><div class="shop">${done.map(row).join('')}</div></section>`:''}`;},
-board(){const b=ui.board,e=D.events.find(x=>x.id===ui.ev)||(b&&b.event);
+board(){const b=ui.board,e=evNow();
   if(!e)return '<section class="sec"><p class="muted">Loading the board…</p></section>';
   const back='<button class="btn sm" data-act="go" data-v="events">← Events</button>';
   const ph=phase(e);
@@ -188,7 +190,7 @@ board(){const b=ui.board,e=D.events.find(x=>x.id===ui.ev)||(b&&b.event);
     return head+`<section class="sec"><h2>Entries close in ${until(new Date(deadline(e)).toISOString())}</h2>${gs.length?`<div class="shop">${gs.map(g=>evItem(e,g,true)).join('')}</div>`:'<p class="muted">None of your golfers play on this tour.</p>'}${flash()}</section>${previewHTML(e)}`;}
   if(!b||!b.players)return head+'<section class="sec"><p class="muted">Loading the board…</p></section>';
   if(!b.players.length)return head+`<section class="sec"><p class="muted">Setting the field. The first tee time is ${until(e.starts_at)} away.</p></section>`;
-  return head+watchHTML(b,e)+`<div id="boardBox">${boardHTML(b,e)}</div>`;},
+  return head+(e.status==='final'?podiumHTML(b,e):'')+watchHTML(b,e)+`<div id="boardBox">${boardHTML(b,e)}</div>`;},
 standings(){const tours=TORDER,t=ui.tour&&ui.tour!=='all'?ui.tour:(G()&&!G().retired?G().tour:'p1');ui.tour=t;
   const rows=ui.stand&&ui.stand.t===t?ui.stand.rows:null;if(!rows)loadStand(t);
   return `<section class="intro"><p class="eyebrow">Season ${D.world?D.world.season:1}</p><h1>Standings</h1><p class="lede">Points from finished events this season. At the end of the month the top ${Math.round(FIELD*.2)} on each pro tour go up and the bottom ${Math.round(FIELD*.2)} go down.</p></section>
@@ -234,18 +236,44 @@ async function loadBoard(){if(!ui.ev)return;const {data,error}=await SB.rpc('eve
 async function loadWatch(){const {data}=await SB.rpc('event_watch',{eid:ui.ev,gid:ui.watch});ui.feed=data||[];}
 function boardRows(b,e){const pars=COURSES[e.ci].holes.map(h=>h.par);
   return b.players.map(p=>{let tot=0,thru=0,rd=0,strokes=[];(p.scores||[]).forEach((r,i)=>{r.forEach((s,h)=>tot+=s-pars[h]);if(r.length){rd=i;thru=r.length;}strokes.push(r.reduce((a,c)=>a+c,0));});return{p,tot,thru,rd,strokes};});}
-function boardHTML(b,e){const rows=boardRows(b,e),fin=e.status==='final',cutR=b.vis&&b.vis[1]===18;
+const COLG='<colgroup><col style="width:2.7em"><col><col style="width:4.4em"><col style="width:2.9em"><col style="width:2.5em"></colgroup>';
+function boardHTML(b,e){const rows=boardRows(b,e),fin=e.status==='final',cutDone=fin||(b.vis&&b.vis[1]===18);
   const R=Math.max(0,...rows.map(r=>r.rd));
   rows.sort((a,c)=>fin?((a.p.pos_n||999)-(c.p.pos_n||999)):((a.p.cut?1:0)-(c.p.cut?1:0)||a.tot-c.tot||c.thru-a.thru));
-  let pos=0;rows.forEach((r,i)=>{if(fin){r.pos=r.p.pos;return;}if(i===0||r.tot!==rows[i-1].tot||r.p.cut!==rows[i-1].p.cut)pos=i+1;r.pos=r.p.cut?'MC':String(pos);});
-  if(!fin){const act=rows.filter(r=>!r.p.cut),H=r=>(4-r.rd)*18-r.thru;const list=act.map(r=>({r:ratingFor(r.p,e.ci),cur:r.tot,H:Math.max(0,(3-r.rd)*18+(18-r.thru))}));const w=winProbs(list,300);act.forEach((r,i)=>r.odds=oddsLabel(w[i]));}
+  let pos=0;rows.forEach((r,i)=>{if(fin){r.pos=r.p.pos||'';return;}if(i===0||r.tot!==rows[i-1].tot||r.p.cut!==rows[i-1].p.cut)pos=i+1;r.pos=r.p.cut?'MC':(rows.filter(x=>!x.p.cut&&x.tot===r.tot).length>1?'T':'')+pos;});
+  if(!fin){const act=rows.filter(r=>!r.p.cut),list=act.map(r=>({r:ratingFor(r.p,e.ci),cur:r.tot,H:Math.max(0,(3-r.rd)*18+(18-r.thru))}));const w=winProbs(list,1500);act.forEach((r,i)=>r.odds=oddsLabel(w[i]));}
+  const proj=!cutDone&&rows.length>CUT?rows[CUT-1].tot:null,lastIn=proj===null?-1:rows.filter(r=>r.tot<=proj).length-1;
+  const cutTxt=proj!==null?`Projected cut ${fmtPar(proj)}`:b.event&&b.event.cut_line!==null&&b.event.cut_line!==undefined?`Cut fell at ${fmtPar(b.event.cut_line)}`:'';
   ui.posMap=new Map(rows.map(r=>[r.p.id,r.p.cut?'Missed cut':`${r.pos} at ${fmtPar(r.tot)}`]));
-  const show=ui.full?rows:rows.filter((r,i)=>i<15||r.p.managed);
   const live=!fin&&phase(e)==='live';
-  return `<section class="board"><div class="row"><h2>${fin?'Final':live?`Round ${R+1}, live`:'Waiting for the first tee shot'}</h2><span class="chip">${cutR&&!fin?'Cut made':''}</span></div>
- <div class="bscroll"><table><thead><tr><th class="num">Pos</th><th>Golfer</th>${fin?'<th class="num">Pts</th>':'<th class="num">Odds</th>'}<th class="num">Par</th><th class="num">${fin?'Total':'Thru'}</th></tr></thead><tbody>
- ${show.map((r,i)=>`${i>0&&rows.indexOf(r)-rows.indexOf(show[i-1])>1?'<tr class="gap"><td colspan="5">⋮</td></tr>':''}<tr class="${r.p.mine?'me':r.p.managed?'mine':''}"><td class="num">${r.pos||''}</td><td class="nm">${flagHTML(r.p.country)}${esc(r.p.name)}${r.p.managed?`<small class="sch">${esc(r.p.stable||'')}</small>`:isCol(e.tour)?`<small class="sch">${esc(r.p.college||'')}</small>`:''}${fin&&r.p.pay?`<small class="sch">${fmt$(r.p.pay)}</small>`:''}${r.p.managed?` <button class="btn xs" data-act="watch" data-v="${r.p.id}">Watch</button>`:''}</td>${fin?`<td class="num">${r.p.pts?fmtPts(r.p.pts):''}</td>`:`<td class="num odds">${r.odds||''}</td>`}<td class="num${r.tot<0?' under':''}">${fmtPar(r.tot)}</td><td class="num">${fin?r.strokes.reduce((a,c)=>a+c,0)||'':r.thru===18&&r.rd===R?'F':r.thru||'–'}</td></tr>`).join('')}
- </tbody></table></div><div class="row"><span class="muted small">${live?'Updates every few seconds.':''}</span><button class="btn sm" data-act="fullBoard">${ui.full?'Show fewer':'Show all '+rows.length}</button></div></section>`;}
+  const row=(r,cl)=>{const i=rows.indexOf(r),chip=proj!==null&&!r.p.cut&&(r.p.managed)?(i>lastIn?'<span class="chip out">Outside the cut</span>':'<span class="chip">Inside the cut</span>'):r.p.cut&&r.p.managed?'<span class="chip">Missed the cut</span>':'';
+    const o0=r.p.odds0?oddsLabel(r.p.odds0):'';
+    return `<tr class="${r.p.mine?'me':r.p.managed?'mine':''}${cl?' cutline':''}"><td class="num">${r.pos}</td><td class="nm">${flagHTML(r.p.country)}${esc(r.p.name)}${r.p.managed?`<small class="sch">${esc(r.p.stable||'')}</small>`:isCol(e.tour)?`<small class="sch">${esc(r.p.college||'')}</small>`:''}${chip}${r.p.managed?` <button class="btn xs" data-act="watch" data-v="${r.p.id}">${ui.watch===r.p.id?'Watching':'Watch'}</button>`:''}</td><td class="num odds">${fin?(r.p.pay?`${fmt$(r.p.pay)}<small class="o0">${fmtPts(r.p.pts)} pts</small>`:''):`${r.odds||(r.p.cut?'':'–')}${o0?`<small class="o0">from ${o0}</small>`:''}`}</td><td class="num${r.tot<0?' under':''}">${fmtPar(r.tot)}</td><td class="num">${fin?r.strokes.reduce((a,c)=>a+c,0)||'':r.thru===18&&r.rd===R?'F':r.thru||'–'}</td></tr>`;};
+  const mineR=rows.filter(r=>r.p.mine),others=rows.filter(r=>r.p.managed&&!r.p.mine),full=ui.full,show=full?rows:rows.slice(0,10);
+  const head=`<tr><th class="num">Pos</th><th>Golfer</th><th class="num">${fin?'Won':'Odds'}</th><th class="num">Par</th><th class="num">${fin?'Tot':'Thru'}</th></tr>`;
+  return `<section class="board"><div class="row"><h2>${fin?'Final leaderboard':live?`Round ${R+1}, live`:'Waiting for the first tee shot'}</h2><span class="chip cutchip">${cutTxt}</span></div>
+ <table>${COLG}<thead>${head}</thead><tbody>
+ ${mineR.length?`<tr class="sep"><td colspan="5">Your golfer${mineR.length>1?'s':''}</td></tr>${mineR.map(r=>row(r)).join('')}`:''}
+ ${others.length?`<tr class="sep"><td colspan="5">Other managers’ golfers</td></tr>${others.map(r=>row(r)).join('')}`:''}
+ <tr class="sep"><td colspan="5">${full?'Full field':'Leaders'}</td></tr></tbody></table>
+ <div class="${full?'bscroll':''}" id="bscroll"><table>${COLG}<tbody>${show.map(r=>row(r,rows.indexOf(r)===lastIn)).join('')}</tbody></table></div>
+ <div class="row"><span class="muted small">${live?'Updates every few seconds.':proj!==null?'':''}${proj!==null?' Dashed line: the projected cut. Top '+CUT+' and ties play the weekend.':''}</span><button class="btn sm" data-act="fullBoard">${full?'Show top 10':'Show all '+rows.length}</button></div></section>`;}
+/* the end of an event: the podium and the week in numbers */
+function podiumHTML(b,e){const rows=boardRows(b,e).filter(r=>r.p.pos_n).sort((a,c)=>a.p.pos_n-c.p.pos_n);if(!rows.length)return '';
+  const par=COURSES[e.ci].par||COURSES[e.ci].holes.reduce((a,h)=>a+h.par,0),top=rows.slice(0,3),win=rows[0],second=rows[1];
+  const margin=second?second.tot-win.tot:0,how=margin>0?`by ${margin} stroke${margin>1?'s':''}`:'in a playoff';
+  const step=(r,place)=>r?`<div class="pod p${place}"><div class="pname">${flagHTML(r.p.country)}${esc(r.p.name)}</div><div class="psub">${r.p.managed?esc(r.p.stable||''):isCol(e.tour)?esc(r.p.college||''):'Tour regular'}</div><div class="pblock"><b>${r.p.pos}</b><span>${fmtPar(r.tot)}</span><small>${r.p.pay?fmt$(r.p.pay):''}</small></div></div>`:'';
+  let low=null,best4=null;rows.forEach(r=>(r.p.scores||[]).forEach((rd,i)=>{if(rd.length!==18)return;const s=sum(rd);if(!low||s<low.s)low={r,s,i};if(i===3&&(!best4||s<best4.s))best4={r,s};}));
+  const mineR=rows.filter(r=>r.p.mine),oth=rows.filter(r=>r.p.managed&&!r.p.mine),cutM=boardRows(b,e).filter(r=>r.p.managed&&r.p.cut);
+  const line=r=>`<div class="item"><b>${flagHTML(r.p.country)}${esc(r.p.name)}</b><span>${r.p.cut?'Missed the cut':`Finished ${r.p.pos} at ${fmtPar(r.tot)}`}${r.p.odds0&&!r.p.cut?`, starting at ${oddsLabel(r.p.odds0)}`:''}.</span>${r.p.pay||r.p.pts?`<span class="tag hot">${r.p.pay?fmt$(r.p.pay):''}${r.p.pts?` · ${fmtPts(r.p.pts)} pts`:''}</span>`:''}</div>`;
+  const allMine=boardRows(b,e).filter(r=>r.p.mine).map(r=>Object.assign(r,{tot:r.tot})),allOth=boardRows(b,e).filter(r=>r.p.managed&&!r.p.mine);
+  return `<section class="podium-wrap"><p class="eyebrow">Final</p><h2 class="champ">${flagHTML(win.p.country)}${esc(win.p.name)} wins ${how}</h2>
+ <p class="lede">${fmtPar(win.tot)} for the week${win.p.odds0?`, from ${oddsLabel(win.p.odds0)} at the start`:''}.${win.p.pay?` He takes ${fmt$(win.p.pay)}${win.p.pts?` and ${fmtPts(win.p.pts)} points`:''}.`:''}</p>
+ <div class="podium">${step(top[1],2)}${step(top[0],1)}${step(top[2],3)}</div>
+ <div class="stats">${low?`<div><b>${fmtPar(low.s-par)}</b><span>Low round: ${esc(low.r.p.name)}, R${low.i+1}</span></div>`:''}${best4?`<div><b>${fmtPar(best4.s-par)}</b><span>Best final round: ${esc(best4.r.p.name)}</span></div>`:''}${b.event.cut_line!==null&&b.event.cut_line!==undefined?`<div><b>${fmtPar(b.event.cut_line)}</b><span>Cut line</span></div>`:''}</div>
+ ${allMine.length?`<h3>Your golfers</h3><div class="shop">${allMine.sort((a,c)=>(a.p.pos_n||999)-(c.p.pos_n||999)).map(line).join('')}</div>`:''}
+ ${allOth.length?`<h3>Other managers</h3><div class="shop">${allOth.sort((a,c)=>(a.p.pos_n||999)-(c.p.pos_n||999)).map(line).join('')}</div>`:''}
+</section>`;}
 async function loadPreview(e){
   const [gs,en]=await Promise.all([SB.from('golfers').select('id,name,country,college,stable,manager_id,sk,yr,enter_rule').eq('tour',e.tour).eq('retired',false).not('manager_id','is',null),SB.from('entries').select('golfer_id,status').eq('event_id',e.id)]);
   const st=new Map((en.data||[]).map(x=>[x.golfer_id,x.status]));
@@ -271,7 +299,7 @@ function watchHTML(b,e){if(!ui.watch)return '';const p=b.players.find(x=>x.id===
   <div class="status"><span class="lab">${flagHTML(p.country)}${esc(p.name)}</span><span class="tag" id="posTag"></span><span class="tag" id="moodTag"></span><span id="runTag"></span></div>
   <div class="feed" id="feed" aria-live="polite"></div>
   <div id="wcard"></div>
-  <p class="muted small">Holes appear as he plays them on the clock, about one every ${Math.round(S().round_min*60/18)} seconds. Tap a score to replay that hole.</p>
+  <p class="muted small">Holes appear as he plays them on the clock, about one every ${Math.round(rmin(e)*60/18)} seconds. Tap a score to replay that hole.</p>
  </div></section>`;}
 function watchScores(){const b=ui.board,p=b&&b.players.find(x=>x.id===ui.watch);return p?p.scores||[]:[];}
 function syncAnim(){
@@ -284,7 +312,7 @@ function syncAnim(){
 }
 function beginHole(x,first){const A=ui.anim,e=D.events.find(q=>q.id===ui.ev)||ui.board.event,h=COURSES[e.ci].holes[x.hole];
   A.cur=x;A.h=h;A.si=0;A.t=0;A.w=0;A.trail=[];A.cam=null;A.phase=x.shots.length?'shot':'idle';A.cardR=x.round;
-  if(first)A.feed=[];
+  if(first){A.feed=[];A.shown=hkey(x.round,x.hole)-1;}
   feedA(`Round ${x.round+1}, hole ${x.hole+1}. Par ${h.par}, ${h.len} yards.`,'big');paintHUD();paintSide();}
 function feedA(text,cls){const A=ui.anim;A.feed.push({text,cls:cls||''});if(A.feed.length>6)A.feed.shift();paintFeed();}
 function paintFeed(){const el=document.getElementById('feed');if(!el||!ui.anim)return;const f=ui.anim.feed;el.innerHTML=f.map((x,i)=>`<p class="${x.cls}${i===f.length-1?' now':''}">${esc(x.text)}</p>`).join('');}
@@ -298,7 +326,7 @@ function wcardHTML(course,scores,R){const half=(a,label)=>{const hs=course.holes
   return `<div class="cards">${half(0,'Out')}${half(9,'In')}</div>`;}
 function paintSide(){const A=ui.anim,el=document.getElementById('wcard');if(!A||!el)return;const e=D.events.find(q=>q.id===ui.ev)||ui.board.event,sc=watchScores();
   const rounds=sc.map((r,i)=>i).filter(i=>sc[i]&&sc[i].length),R=A.cardR!==null&&A.cardR!==undefined?A.cardR:rounds[rounds.length-1]||0;
-  el.innerHTML=(rounds.length>1?`<div class="ctrl">${rounds.map(i=>`<button class="btn sm${i===R?' on':''}" data-act="wRound" data-v="${i}">R${i+1}: ${sum(sc[i])}</button>`).join('')}</div>`:'')+wcardHTML(COURSES[e.ci],sc[R]||[],R);
+  el.innerHTML=(rounds.length>1?`<div class="ctrl">${rounds.map(i=>`<button class="btn sm${i===R?' on':''}" data-act="wRound" data-v="${i}">R${i+1}: ${sum(sc[i])}</button>`).join('')}</div>`:'')+wcardHTML(COURSES[e.ci],A.live?(sc[R]||[]).filter((s,j)=>hkey(R,j)<=(A.shown??-1)):(sc[R]||[]),R);
   const pt=document.getElementById('posTag');if(pt)pt.textContent=ui.posMap&&ui.posMap.get(ui.watch)||'';
   const x=A.cur,mt=document.getElementById('moodTag');if(mt)mt.textContent=x&&x.mood!==null&&x.mood!==undefined?moodWord(x.mood):'';
   const rt=document.getElementById('runTag');if(rt)rt.innerHTML=x&&x.run>=2?'<span class="tag hot">Hot streak</span>':x&&x.run<=-2?'<span class="tag">Gone cold</span>':'';
@@ -308,7 +336,7 @@ function totThrough(r,h){const e=D.events.find(q=>q.id===ui.ev)||ui.board.event,
   sc.forEach((rd,i)=>{if(i>r)return;rd.forEach((s,j)=>{if(i<r||j<=h)t+=s-pars[j];});});return t;}
 function endHoleA(){const A=ui.anim,x=A.cur,sc=watchScores(),s=sc[x.round]&&sc[x.round][x.hole];
   if(s!==undefined){const d=s-A.h.par,t=totThrough(x.round,x.hole);feedA(`${SCORE_NAMES[d]||'A '+s}. He is ${t===0?'level par':fmtPar(t)}${x.round?' for the week':''} through ${x.hole+1}.`,'big');}
-  A.phase='post';A.w=0;paintSide();}
+  A.phase='post';A.w=0;A.shown=Math.max(A.shown??-1,hkey(x.round,x.hole));paintSide();}
 function fitCanvas(){const cv=document.getElementById('cv');if(!cv)return;const dpr=Math.min(2,window.devicePixelRatio||1),r=cv.getBoundingClientRect();cv.width=Math.max(200,Math.round(r.width*dpr));cv.height=Math.max(250,Math.round(r.height*dpr));if(ui.anim)ui.anim.cam=null;}
 function camFor(A,green){const cv=document.getElementById('cv'),W=cv.width,H=cv.height,h=A.h;
   if(green)return{x:h.green[0],y:h.green[1],s:Math.min(W,H)/110};const b=h.box;return{x:(b[0]+b[2])/2,y:(b[1]+b[3])/2,s:Math.min(W/(b[2]-b[0]),H/(b[3]-b[1]))};}
@@ -365,8 +393,18 @@ function drawMap(dt){
 }
 
 /* ---------- render and events ---------- */
+function keepScroll(fn){const bs=document.getElementById('bscroll'),top=bs?bs.scrollTop:0,y=window.scrollY;fn();const b2=document.getElementById('bscroll');if(b2&&top)b2.scrollTop=top;if(Math.abs(window.scrollY-y)>2)window.scrollTo(0,y);}
+function route(){const v=ui.view;if(['loading','auth','join'].includes(v))return '';
+  return '#'+(v==='board'&&ui.ev?'board/'+ui.ev+(ui.watch?'/'+ui.watch:''):v==='stable'&&ui.sel?'stable/'+ui.sel:(v==='standings'||v==='events')&&ui.tour?v+'/'+ui.tour:v);}
+function applyRoute(){const h=decodeURIComponent(location.hash.slice(1));if(!h||h.includes('=')||!D.me)return false;const [v,a,b]=h.split('/');
+  if(!V[v]||['loading','auth','join'].includes(v)||(v==='admin'&&!D.me.is_admin))return false;
+  ui.view=v;if(v==='stable'&&a)ui.sel=a;if((v==='standings'||v==='events')&&a)ui.tour=a;
+  if(v==='board'){if(!a)return false;ui.ev=a;ui.watch=b||null;ui.anim=null;ui.board=null;
+    loadBoard().then(()=>{const e=evNow();if(e&&phase(e)==='open')return loadPreview(e).then(render);render();});}
+  return true;}
 function render(){nav();const v=document.getElementById('view');const f=V[ui.view]||V.loading;
-  const a=document.activeElement,id=a&&a.id,val=a&&a.value;v.innerHTML=f();
+  const r=route();if(r&&location.hash!==r)history.replaceState(null,'',r);
+  const a=document.activeElement,id=a&&a.id,val=a&&a.value;keepScroll(()=>{v.innerHTML=f();});
   if(id){const n=document.getElementById(id);if(n&&n!==a){n.focus();if(n.type==='text'&&val!==undefined)n.value=val;}}
   if(ui.view==='board'&&ui.watch&&document.getElementById('cv'))startLoop();
   const af=document.getElementById('authForm');if(af)af.onsubmit=ev=>{ev.preventDefault();submitAuth();};}
@@ -441,17 +479,23 @@ async function signOut(){try{await SB.auth.signOut();}catch(e){}D.user=null;D.me
 async function start(){
   const {data:{session}}=await SB.auth.getSession();D.user=session?session.user:null;
   if(!D.user){ui.view='auth';return render();}
-  try{await load();}catch(e){ui.err="Couldn't load the world. Refresh to try again.";}
+  try{await load();applyRoute();}catch(e){ui.err="Couldn't load the world. Refresh to try again.";}
   render();
 }
 if(SB){
   SB.auth.onAuthStateChange((event,session)=>{
     if(event==='PASSWORD_RECOVERY'){ui.auth.mode='newpass';ui.view='auth';render();return;}
-    const u=session?session.user:null;if(u&&(!D.user||D.user.id!==u.id)&&ui.auth.mode!=='newpass'){D.user=u;ui.view='loading';render();load().then(render).catch(()=>{});}
+    const u=session?session.user:null;if(u&&(!D.user||D.user.id!==u.id)&&ui.auth.mode!=='newpass'){D.user=u;ui.view='loading';render();load().then(()=>{applyRoute();render();}).catch(()=>{});}
   });
   start();
   // keep things fresh: the world every 30 seconds, an open board every 5
   setInterval(()=>{if(D.user&&D.me&&!ui.busy&&!['auth','join','scout','admin','news'].includes(ui.view)&&!document.hidden){const a=document.activeElement;if(a&&/INPUT|SELECT/.test(a.tagName))return;load().then(()=>{if(ui.view!=='board')render();}).catch(()=>{});}},30000);
-  setInterval(()=>{if(ui.view==='board'&&!document.hidden){const e=D.events.find(x=>x.id===ui.ev);if(e&&phase(e)==='open'){(Date.now()%15000<5000?loadPreview(e):Promise.resolve()).then(()=>{const a=document.activeElement;if(!(a&&a.tagName==='SELECT'))render();});return;}loadBoard().then(()=>{const a=document.activeElement;if(a&&a.tagName==='SELECT')return;const bb=document.getElementById('boardBox'),e2=D.events.find(x=>x.id===ui.ev)||(ui.board&&ui.board.event);if(bb&&document.getElementById('watchBox')&&ui.board&&e2){bb.innerHTML=boardHTML(ui.board,e2);paintSide();}else render();});}},5000);
+  setInterval(()=>{if(ui.view!=='board'||document.hidden)return;const e=evNow();
+    if(e&&phase(e)==='open'){(Date.now()%15000<5000?loadPreview(e):Promise.resolve()).then(()=>{const a=document.activeElement;if(!(a&&a.tagName==='SELECT'))keepScroll(render);});return;}
+    const was=ui.board&&ui.board.event&&ui.board.event.status,hadPlayers=ui.board&&ui.board.players&&ui.board.players.length;
+    loadBoard().then(()=>{const a=document.activeElement;if(a&&a.tagName==='SELECT')return;const e2=evNow(),bb=document.getElementById('boardBox');
+      const changed=!ui.board||ui.board.event.status!==was||!hadPlayers;
+      if(bb&&ui.board&&e2&&!changed){keepScroll(()=>{bb.innerHTML=boardHTML(ui.board,e2);});paintSide();}
+      else{if(e2&&ui.board&&ui.board.event.status==='final'){const d=D.events.find(x=>x.id===ui.ev);if(d)d.status='final';}render();}});},5000);
 }else document.getElementById('view').innerHTML='<p class="lede">Couldn’t load the game. Refresh to try again.</p>';
 window.addEventListener('resize',()=>{if(document.getElementById('cv'))fitCanvas();});

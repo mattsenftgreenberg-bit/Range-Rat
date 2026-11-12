@@ -219,13 +219,13 @@ const A: Record<string, (c: any) => Promise<any>> = {
     await sb.from('settings_log').insert({ key, old: old?.value ?? DEFAULTS[key], new: v, by: uid });
   },
   async adminLog() { const { data } = await sb.from('settings_log').select('*').order('at', { ascending: false }).limit(50); return { log: data }; },
-  async adminTest({ b }) {
+  async adminTest({ b, s }) {
     const tour = String(b.tour || 'col0'); if (!E.TOURS[tour]) no('Unknown tour.');
     const mins = E.clamp(Math.round(+b.mins || 7), 6, 600);
     const { data: w } = await sb.from('world').select('season').single();
     const c = E.calendar(tour, w!.season)[Math.floor(Math.random() * 7)];
     const { data, error } = await sb.from('events').insert({ tour, season: w!.season, week: 0, name: 'Test: ' + c.name, ci: c.ci, type: c.type, purse: c.purse, fee: 0, pm: c.pm, test: true,
-      starts_at: new Date(Date.now() + mins * 60e3).toISOString() }).select('id').single();
+      starts_at: new Date(Date.now() + mins * 60e3).toISOString(), round_min: s.round_min }).select('id').single();
     if (error) no(error.message);
     return { id: data!.id };
   },

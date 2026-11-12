@@ -101,7 +101,7 @@ async function scheduleSeason(s: any, season: number, start: string, end: string
       const di = Math.min(days.length - 1, Math.floor((k + (ti % 4) / 4) * days.length / n)), dd = days[di];
       const at = etInstant(dd.y, dd.m, dd.d, hours[(ti + k) % hours.length]);
       if (at.getTime() < cutoff) return;
-      rows.push({ tour, season, week: k + 1, name: c.name, ci: c.ci, type: c.type, purse: Math.round(c.purse * s.purse_mult), fee: Math.round(c.fee * s.fee_mult), pm: c.pm, starts_at: at.toISOString() });
+      rows.push({ tour, season, week: k + 1, name: c.name, ci: c.ci, type: c.type, purse: Math.round(c.purse * s.purse_mult), fee: Math.round(c.fee * s.fee_mult), pm: c.pm, starts_at: at.toISOString(), round_min: s.round_min });
     });
   });
   if (rows.length) { const { error } = await sb.from('events').insert(rows); if (error) throw new Error('schedule: ' + error.message); }
@@ -143,7 +143,15 @@ async function lockEvent(ev: any, done: string[]) {
   q = col ? q.eq('pool_season', w!.season) : q.is('pool_season', null);
   const { data: pool } = await q;
   for (const g of shuffle(pool || [])) { if (field.length >= E.FIELD) break; field.push({ id: g.id, managed: false }); }
-  const rows = field.slice(0, E.FIELD).map((f) => ({ event_id: ev.id, golfer_id: f.id, managed: f.managed, slot0: Math.floor(Math.random() * 3) }));
+  const fl = field.slice(0, E.FIELD);
+  // starting odds, worked out once so everyone sees the same numbers
+  const odds0 = new Map<string, number>();
+  for (let i = 0; i < fl.length; i += 60) {
+    const { data: gs } = await sb.from('golfers').select('id,sk,eq,conf,fatigue').in('id', fl.slice(i, i + 60).map((f) => f.id));
+    for (const g of gs || []) odds0.set(g.id, E.ratingFor(g, ev.ci));
+  }
+  const ids = fl.map((f) => f.id), probs = E.winProbs(ids.map((id) => ({ r: odds0.get(id) ?? 60, cur: 0, H: 72 })), 4000);
+  const rows = fl.map((f, i) => ({ event_id: ev.id, golfer_id: f.id, managed: f.managed, slot0: Math.floor(Math.random() * 3), odds0: probs[i] }));
   const { error } = await sb.from('event_players').insert(rows);
   if (error) throw new Error('field: ' + error.message);
   await sb.from('events').update({ field: rows.length }).eq('id', ev.id);
@@ -197,9 +205,9 @@ async function simRound(ev: any) {
   await sb.from('events').update({ rounds_done: r + 1, cut_line: r === 1 ? eng.cutLine : ev.cut_line, meta: { ...ev.meta, wind: [...(ev.meta?.wind || []), eng.wind] } }).eq('id', ev.id);
 }
 async function finalizeDue(s: any, done: string[]) {
-  const by = new Date(Date.now() - 4 * s.round_min * 60e3).toISOString();
-  const { data: evs } = await sb.from('events').select('*').eq('status', 'locked').eq('rounds_done', 4).lte('starts_at', by).order('starts_at').limit(2);
-  for (const ev of evs || []) await finalize(ev, s, done);
+  const { data: evs } = await sb.from('events').select('*').eq('status', 'locked').eq('rounds_done', 4).lte('starts_at', new Date().toISOString()).order('starts_at').limit(6);
+  const due = (evs || []).filter((ev: any) => Date.parse(ev.starts_at) + 4 * Number(ev.round_min || s.round_min) * 60e3 <= Date.now()).slice(0, 2);
+  for (const ev of due) await finalize(ev, s, done);
 }
 async function finalize(ev: any, s: any, done: string[]) {
   const { data: claimed } = await sb.from('events').update({ status: 'final' }).eq('id', ev.id).eq('status', 'locked').select('id');

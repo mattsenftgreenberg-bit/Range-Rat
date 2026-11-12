@@ -208,3 +208,29 @@ input[type=number]{font:inherit;color:var(--ink);background:var(--surface);borde
 .retire{border:1.5px dashed var(--line);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:10px}
 .uhead small .tag{margin-left:4px;color:var(--fill);border-color:var(--fill)}
 #coachSel{max-width:min(100%,560px)}
+
+/* ---- online: leaderboard extras ---- */
+.board .o0{display:block;font-size:.66em;opacity:.65;letter-spacing:.02em;line-height:1.1}
+.board .chip.out{color:var(--flag);opacity:1}
+.board .cutchip{opacity:1;color:var(--flag);font-size:.86rem}
+.board .nm .btn.xs{margin-top:3px}
+/* ---- online: the podium ---- */
+.podium-wrap{display:flex;flex-direction:column;gap:12px;margin-block:4px 18px}
+.podium-wrap .champ{font-size:clamp(1.5rem,6vw,2.3rem);line-height:1.05;text-wrap:balance}
+.podium-wrap h3{font-family:var(--display);text-transform:uppercase;letter-spacing:.06em;margin-top:6px}
+.podium{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:end;margin-top:6px}
+.pod{display:flex;flex-direction:column;align-items:center;text-align:center;gap:3px;min-width:0}
+.pod .pname{font-family:var(--display);font-weight:700;text-transform:uppercase;letter-spacing:.03em;line-height:1.1;overflow-wrap:anywhere}
+.pod .psub{font-size:.75rem;color:var(--muted);overflow-wrap:anywhere}
+.pblock{width:100%;border-radius:6px 6px 0 0;background:var(--board);color:var(--board-ink);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:10px 4px;gap:2px;transform-origin:bottom;animation:rise .9s cubic-bezier(.2,.8,.2,1) both}
+.pblock b{font-family:var(--display);font-size:1.9rem;line-height:1}
+.pblock span{font-family:var(--display);font-size:1.1rem}
+.pblock small{font-size:.78rem;opacity:.85}
+.p1 .pblock{height:150px;background:#c9a227;color:#1d1a0c;animation-delay:.5s}
+.p2 .pblock{height:115px;background:#a9b1b6;color:#1b2023;animation-delay:.25s}
+.p3 .pblock{height:90px;background:#b07a4a;color:#1f140b}
+.p1 .pname{font-size:1.15rem}
+@keyframes rise{from{transform:scaleY(0);opacity:0}to{transform:scaleY(1);opacity:1}}
+.board td.nm{overflow-wrap:anywhere}
+.board .nm .btn.xs{display:inline-block;max-width:100%;white-space:nowrap}
+@media (max-width:420px){.board table{font-size:1rem}.board td{padding:5px 3px}}
