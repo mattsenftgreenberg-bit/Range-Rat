@@ -95,7 +95,7 @@ async function load(){
     SB.from('golfers').select('id,name,country,manager_id,stable,cr,best,tour,stats,trophies,ret_age,color').eq('retired',true).not('cr','is',null),
     SB.from('golfers').select('id,name,country,manager_id,stable,sk,yr,tour,college,ask,arch,stats,listed_at,color').not('ask','is',null).eq('retired',false).order('ask'),
   ]);
-  D.me=me.data;D.golfers=gs.data||[];D.events=ev.data||[];D.entries=en.data||[];D.world=w.data;D.coaches=co.data||[];D.market=mk.data||[];
+  D.me=me.data;D.golfers=gs.data||[];D.events=(ev.data||[]).filter(e=>e.tour!=='col1'&&e.tour!=='col2'); // the old college circuits are goneD.entries=en.data||[];D.world=w.data;D.coaches=co.data||[];D.market=mk.data||[];
   D.settings={...DEFAULTS};(st.data||[]).forEach(r=>D.settings[r.key]=r.value);
   if(!D.me)ui.view='join';else if(ui.view==='join'||ui.view==='loading')ui.view=mine().length?'stable':'scout';
 }
