@@ -336,15 +336,17 @@ async function finalizeQuick(ev: any, s: any, done: string[]) {
   });
   E.finishEvent(eng);
   // bonuses: most greens in regulation and the longest drive (ties share), and every ace
-  const top = (k: string) => { const m = Math.max(...eng.players.map((p: any) => p.x[k] || 0)); return m > 0 ? eng.players.filter((p: any) => (p.x[k] || 0) === m) : []; };
+  // only managers' golfers can win bonuses
+  const real = eng.players.filter((p: any) => p.managed);
+  const top = (k: string) => { const m = Math.max(0, ...real.map((p: any) => p.x[k] || 0)); return m > 0 ? real.filter((p: any) => (p.x[k] || 0) === m) : []; };
   const gw = top('gir'), dw = top('drive'), bonus = new Map<any, string[]>();
   for (const p of eng.players) { p.pay = Math.round((p.payf || 0) * ev.purse); p.bon = 0; }
   const give = (p: any, amt: number, why: string) => { p.bon += amt; (bonus.get(p) || bonus.set(p, []).get(p))!.push(why); };
   gw.forEach((p: any) => give(p, Math.round(s.qf_bonus / gw.length), `most greens hit (${p.x.gir})`));
   dw.forEach((p: any) => give(p, Math.round(s.qf_bonus / dw.length), `long drive (${p.x.drive} yards)`));
-  eng.players.forEach((p: any) => { if (p.x.aces) give(p, s.qf_ace * p.x.aces, p.x.aces > 1 ? `${p.x.aces} holes in one` : 'a hole in one'); });
+  real.forEach((p: any) => { if (p.x.aces) give(p, s.qf_ace * p.x.aces, p.x.aces > 1 ? `${p.x.aces} holes in one` : 'a hole in one'); });
   await sb.from('event_players').upsert(eng.players.map((p: any) => ({ event_id: ev.id, golfer_id: p.g.id, pos: p.pos, pos_n: p.posN, pts: 0, pay: p.pay + p.bon, won: !!p.won, extra: { ...p.x, prize: p.pay, bonus: p.bon, why: bonus.get(p) || [] } })));
-  await sb.from('events').update({ meta: { ...ev.meta, bonus: { gir: gw.map((p: any) => p.g.id), drive: dw.map((p: any) => p.g.id), aces: eng.players.filter((p: any) => p.x.aces).map((p: any) => p.g.id) } } }).eq('id', ev.id);
+  await sb.from('events').update({ meta: { ...ev.meta, bonus: { gir: gw.map((p: any) => p.g.id), drive: dw.map((p: any) => p.g.id), aces: real.filter((p: any) => p.x.aces).map((p: any) => p.g.id) } } }).eq('id', ev.id);
   const news: Record<string, string[]> = {};
   for (const p of eng.players) {
     const g = p.g; if (!g.manager_id) continue;
