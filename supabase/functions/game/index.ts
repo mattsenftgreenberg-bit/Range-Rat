@@ -193,6 +193,23 @@ const A: Record<string, (c: any) => Promise<any>> = {
     return { msg: `${g.name} signs for ${fmt$(g.ask)}.` };
   },
 
+  // A scouting report on a golfer for sale (or one of yours): letter grades for his ceilings and how much room he has left.
+  // The scouts aren't perfect, but the same scout gives the same answer about the same golfer.
+  async report({ uid, b }) {
+    const { data: g } = await sb.from('golfers').select('id,name,manager_id,ask,sk,retired').eq('id', b.id).maybeSingle();
+    if (!g || g.retired) no('No report on him.');
+    if (!g.ask && g.manager_id !== uid) no('The scouts only report on golfers for sale.');
+    const { data: sec } = await sb.from('golfer_secrets').select('ce').eq('golfer_id', g.id).single();
+    const ce = sec!.ce, r = E.mulberry32(E.hash('report-' + g.id)), out: any = {};
+    for (const u of 'smlx') {
+      const cv = E.um(ce, u), room = cv - E.um(g.sk, u);
+      let gi = cv >= 86 ? 0 : cv >= 79 ? 1 : 2; if (r() < 0.25) gi = E.clamp(gi + (r() < 0.5 ? -1 : 1), 0, 2);
+      let ri = room > 8 ? 0 : room > 3 ? 1 : 2; if (r() < 0.2) ri = E.clamp(ri + (r() < 0.5 ? -1 : 1), 0, 2);
+      out[u] = { grade: 'ABC'[gi], room: ['Plenty of room to grow', 'Some room left', 'Close to his ceiling'][ri] };
+    }
+    return { report: out };
+  },
+
   // ---- retirement and coaching ----
   async retire({ uid, b, s }) {
     const g = await myGolfer(uid, b.id);

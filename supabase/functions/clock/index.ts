@@ -25,6 +25,7 @@ Deno.serve(async (req) => {
     const s = await settings();
     await ensureWorld(s, done);
     await scheduleQuick(s, done);
+    await topUpSeason(s, done);
     await lockDue(s, done);
     await simNext(s, done); // one round per call keeps each call well inside its time limit
     await finalizeDue(s, done);
@@ -83,29 +84,39 @@ async function ensureWorld(s: any, done: string[]) {
 }
 
 // ---------- the calendar ----------
-// About `events_per_season` events per tour per calendar month, on weekday evenings (New York time).
-// A part-month season (the first one) gets proportionally fewer.
+// One event per tour every night of the season (weeknights only if `weekends` is off), 6 to 10pm New York time.
+// Fills any night a tour has no event yet, so it also tops up a season already under way. The last night is the Finale.
 async function scheduleSeason(s: any, season: number, start: string, end: string) {
   const days: { y: number; m: number; d: number }[] = [];
   for (let t = Date.parse(start + 'T12:00:00Z'); t <= Date.parse(end + 'T12:00:00Z'); t += 864e5) {
     const d = new Date(t), wd = d.getUTCDay();
-    if (wd >= 1 && wd <= 5) days.push({ y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate() });
+    if (s.weekends || (wd >= 1 && wd <= 5)) days.push({ y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate() });
   }
-  if (!days.length) return;
-  const p = days[0];
-  let W = 0; for (let d = 1; d <= lastDay(p.y, p.m); d++) { const wd = new Date(Date.UTC(p.y, p.m - 1, d)).getUTCDay(); if (wd >= 1 && wd <= 5) W++; }
-  const n = E.clamp(Math.round(s.events_per_season * days.length / W), Math.min(3, days.length), s.events_per_season);
+  if (!days.length) return 0;
+  const { data: have } = await sb.from('events').select('tour,starts_at').eq('season', season).eq('test', false).not('tour', 'like', 'qf%');
+  const got = new Set((have || []).map((e: any) => e.tour + '|' + etDate(new Date(e.starts_at))));
   const hours: number[] = s.hours, cutoff = Date.now() + (s.deadline_min + 10) * 60e3, rows: any[] = [];
   TORDER.forEach((tour, ti) => {
-    const cal = E.calendar(tour, season), picks = cal.slice(0, n - 1).concat([cal[cal.length - 1]]);
-    picks.forEach((c: any, k: number) => {
-      const di = Math.min(days.length - 1, Math.floor((k + (ti % 4) / 4) * days.length / n)), dd = days[di];
+    days.forEach((dd, k) => {
+      if (got.has(tour + '|' + iso(dd.y, dd.m, dd.d))) return;
+      const last = k === days.length - 1, c = last ? E.calendar(tour, season).at(-1) : E.calendar(tour, season * 100 + Math.floor(k / 7))[k % 7];
       const at = etInstant(dd.y, dd.m, dd.d, hours[(ti + k) % hours.length]);
       if (at.getTime() < cutoff) return;
       rows.push({ tour, season, week: k + 1, name: c.name, ci: c.ci, type: c.type, purse: Math.round(c.purse * s.purse_mult), fee: Math.round(c.fee * s.fee_mult), pm: c.pm, starts_at: at.toISOString(), round_min: s.round_min });
     });
   });
-  if (rows.length) { const { error } = await sb.from('events').insert(rows); if (error) throw new Error('schedule: ' + error.message); }
+  if (rows.length) { const { error } = await sb.from('events').upsert(rows, { onConflict: 'tour,starts_at', ignoreDuplicates: true }); if (error) throw new Error('schedule: ' + error.message); }
+  return rows.length;
+}
+// Keeps the current season's calendar full (new nights, or a schedule change from the admin page).
+async function topUpSeason(s: any, done: string[]) {
+  const { data: w } = await sb.from('world').select('*').maybeSingle();
+  if (!w || w.meta?.setting_up) return;
+  const stamp = `${w.season}|${!!s.weekends}|${(s.hours || []).join(',')}`;
+  if (w.meta?.sched === stamp && Date.now() - Date.parse(w.meta?.sched_at || 0) < 6 * 3600e3) return;
+  const n = await scheduleSeason(s, w.season, etDate() > w.season_start ? etDate() : w.season_start, w.season_end);
+  await sb.from('world').update({ meta: { ...w.meta, sched: stamp, sched_at: new Date().toISOString() } }).eq('id', 1);
+  if (n) done.push(`scheduled ${n} tour events`);
 }
 
 // ---------- Quick-Fire Opens ----------
