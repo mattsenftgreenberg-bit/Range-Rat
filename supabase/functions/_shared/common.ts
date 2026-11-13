@@ -2,6 +2,15 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import * as E0 from './engine.js';
 export const E: any = E0;
+// The online world: a Junior Tour (ages 15 to 17) and one Collegiate Tour for every college player.
+E.TOURS.jr = { name: 'Junior Tour', mu: 50, purse: 15000, fee: 0 };
+E.TOURS.col0.name = 'Collegiate Tour';
+// Career years: 1-3 junior (15-17), 4-7 college (18-21), 8-23 pro (22-49), 24-33 senior (50-59), then retirement.
+export const Y = { col: 4, pro: 8, sen: 24, last: 33 };
+export const ageOf = (y: number) => (y <= 7 ? 14 + y : y <= 23 ? Math.round(22 + (y - 8) * 1.8) : 26 + y);
+export const classOf = (y: number) => E.CLASS[y - Y.col] || '';
+// tours whose regulars are a fresh crop each season
+export const seasonal = (tour: string) => tour === 'jr' || E.isCol(tour);
 
 export const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -12,7 +21,7 @@ export const DEFAULTS: Record<string, any> = {
   start_cash: 75000, max_golfers: 8, sessions_per_day: 1, lessons_per_day: 5, coach_max: 1.5,
   deadline_min: 5, round_min: 7.5, events_per_season: 8, hours: [18, 19, 20, 21],
   gain_mult: 1, rust_per_day: 0.025, recovery_per_day: 15, event_fatigue: 20, train_fatigue: 15,
-  purse_mult: 1, fee_mult: 1, sale_chance_mult: 1, coach_age_yr: 15,
+  purse_mult: 1, fee_mult: 1, sale_chance_mult: 1, coach_age_yr: 18, recruit_cost: 5000,
   weekends: true,
   qf_on: true, qf_every_min: 20, qf_fee: 200, qf_base: 20000, qf_add: 200, qf_bonus: 1000, qf_ace: 1000000,
 };
@@ -23,7 +32,7 @@ export async function settings() {
   return s;
 }
 
-export const TORDER = ['col0', 'col1', 'col2', 'p3', 'p2', 'p1', 'c2', 'c1'];
+export const TORDER = ['jr', 'col0', 'p3', 'p2', 'p1', 'c2', 'c1'];
 export const RIVALS = ['Halcyon Sports', 'Old Orchard Golf', 'Bayshore Stable', 'Ironwood Academy', 'Tenth Tee Management', 'Dunmore Golf Group', 'Pinecrest Athletes', 'Fairway Partners'];
 export const SESSIONS_NAME: Record<string, string> = { s: 'Short game', m: 'Irons', l: 'Long game', x: 'Miscellaneous' };
 export const EQC = [8000, 40000, 200000];
@@ -60,10 +69,10 @@ export async function cash(mid: string, amt: number, kind: string, note: string,
 
 // ---- market value ----
 export function valueOf(sk: any, yr: number) {
-  const o = E.ovr(sk), a = yr <= 4 ? [0.2, 0.3, 0.45, 0.7][yr - 1] : yr <= 12 ? 1.15 - (yr - 5) * 0.02 : yr <= 20 ? 1 - (yr - 12) * 0.07 : Math.max(0.04, 0.3 - (yr - 21) * 0.03);
+  const o = E.ovr(sk), a = yr <= 3 ? [0.1, 0.14, 0.18][yr - 1] : yr <= 7 ? [0.2, 0.3, 0.45, 0.7][yr - 4] : yr <= 15 ? 1.15 - (yr - 8) * 0.02 : yr <= 23 ? 1 - (yr - 15) * 0.07 : Math.max(0.04, 0.3 - (yr - 24) * 0.03);
   return Math.max(1000, Math.round(50000 * Math.pow(5, (o - 64) / 6) * a / 500) * 500);
 }
-export const canSell = (g: any) => g.yr >= 3;
+export const canSell = (g: any) => g.yr >= 6; // college juniors and up
 // chance a rival coach meets the asking price on a given day
 export const saleChanceDay = (ask: number, val: number, mult = 1) => {
   const wk = ask <= val * 0.9 ? 0.9 : E.clamp(1.5 - ask / val, 0, 0.9);
@@ -151,13 +160,13 @@ export async function insertGolfers(rows: any[], secrets: any[]) {
   for (let i = 0; i < out.length; i += 400) { const { error } = await sb.from('golfer_secrets').insert(out.slice(i, i + 400)); if (error) throw new Error('insert secrets: ' + error.message); }
   return out.map((o) => o.golfer_id);
 }
-export const COLLEGE_TOUR = (college: string) => 'col' + E.confOf(college);
+export const COLLEGE_TOUR = (_college?: string) => 'col0';
 
 // A rival-coach transfer listing: a ready-made golfer on a given tour.
 export function marketProspect(tour: string, yr: number, mu: number) {
   const p = E.rollProspect(mu), c = Math.random() < 0.34 ? 'US' : E.pick(E.CN), N = E.NAMES[c];
   const name = E.pick(N[0]) + ' ' + E.pick(N[1]);
-  const college = E.isCol(tour) ? E.pick(E.CONFS[+tour[3]]) : null;
+  const college = E.isCol(tour) ? E.pick(E.COLLEGES) : null;
   return { p, name, country: c, tour, yr, college };
 }
 export const json = (body: any, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...CORS } });
@@ -165,4 +174,15 @@ export const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-
 export async function clockSecretOk(req: Request) {
   const h = req.headers.get('x-clock-secret'); if (!h) return false;
   const { data } = await sb.rpc('clock_secret'); return !!data && h === data;
+}
+
+// ---- college recruiting ----
+// At 18 a junior gets three offers. Money follows his last junior season's rank, his junior record and his ratings.
+export function collegeOffers(g: any, rank: number, n: number) {
+  const pct = n > 1 ? 1 - (rank - 1) / (n - 1) : 0.5, s = g.stats || {};
+  const q = E.clamp(0.55 * pct + 0.25 * E.clamp((E.ovr(g.sk) - 50) / 25, 0, 1) + 0.04 * Math.min(5, s.wins || 0), 0, 1);
+  const top = Math.round((1500 + 48500 * q * q) / 100) * 100;
+  const schools = [...E.COLLEGES].sort(() => Math.random() - 0.5).slice(0, 3);
+  return schools.map((college: string, i: number) => ({ college, nil: Math.round(top * [1, 0.82 + Math.random() * 0.1, 0.62 + Math.random() * 0.12][i] / 100) * 100 }))
+    .sort((a: any, b: any) => b.nil - a.nil);
 }

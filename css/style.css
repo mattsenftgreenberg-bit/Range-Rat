@@ -275,3 +275,5 @@ small.age{display:inline-block;margin-left:6px;font-size:.72em;font-weight:500;o
 .grade{font-size:2rem!important}
 .grade.gA{color:var(--good)}.grade.gB{color:var(--mid)}.grade.gC{color:var(--bad)}
 .item .linkbtn{font:inherit;text-transform:inherit;letter-spacing:inherit;text-align:left}
+.gstage.jr{--c:#8a5cc7}.gstage.rec{--c:#d0703a}
+.offers{border:2px solid var(--mid);border-radius:8px;padding-inline:14px}

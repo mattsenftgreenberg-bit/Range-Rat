@@ -46,7 +46,9 @@ async function activeCount(uid: string) {
 }
 const scoutView = (p: any) => ({ arch: p.arch, sk: p.sk, grade: p.grade });
 async function newScout(uid: string, rerolls: number) {
+  // juniors are 15: a few points behind where a college freshman would be
   const p = E.rollProspect();
+  for (const k in p.sk) p.sk[k] = Math.max(25, p.sk[k] - 6);
   await sb.from('manager_secrets').upsert({ id: uid, prospect: p });
   await sb.from('managers').update({ prospect: scoutView(p), rerolls }).eq('id', uid);
   return scoutView(p);
@@ -77,13 +79,14 @@ const A: Record<string, (c: any) => Promise<any>> = {
     if ((await activeCount(uid)) >= s.max_golfers) no(`Your roster is full at ${s.max_golfers} active golfers.`);
     const { data: sec } = await sb.from('manager_secrets').select('prospect').eq('id', uid).maybeSingle();
     const p = sec?.prospect; if (!p) no('Scout a junior first.');
-    const college = E.COLLEGES.includes(b.college) ? b.college : E.pick(E.COLLEGES);
+    const cost = s.recruit_cost || 0;
+    if (cost) await cash(uid, -cost, 'recruit', `Signing fee: ${clean(b.name) || 'Tucker Hale'}`, false);
     const country = /^[A-Z]{2,3}$/.test(String(b.country)) ? b.country : 'US';
-    const [id] = await insertGolfers([golferRow({ name: clean(b.name) || 'Tucker Hale', country, college, arch: p.arch, sk: p.sk, tour: COLLEGE_TOUR(college), yr: 1 },
+    const [id] = await insertGolfers([golferRow({ name: clean(b.name) || 'Tucker Hale', country, college: null, arch: p.arch, sk: p.sk, tour: 'jr', yr: 1 },
       { manager_id: uid, stable: me.name, career: true, color: E.clamp(+b.color || 0, 0, 5), sessions: s.sessions_per_day })], [{ ce: p.ce, peak: p.peak, agg: p.agg }]);
     await sb.from('manager_secrets').update({ prospect: null }).eq('id', uid);
     await sb.from('managers').update({ prospect: null }).eq('id', uid);
-    await addNews(uid, [`${clean(b.name) || 'Tucker Hale'} signs with you and joins ${college} as a freshman.`]);
+    await addNews(uid, [`${clean(b.name) || 'Tucker Hale'} signs with you at 15 and starts on the Junior Tour.${cost ? ` Signing fee ${fmt$(cost)}.` : ''}`]);
     return { id };
   },
 
@@ -126,9 +129,20 @@ const A: Record<string, (c: any) => Promise<any>> = {
     await sb.from('golfers').update({ eq: { ...g.eq, [u]: lvl + 1 } }).eq('id', g.id);
   },
   async shirt({ uid, b }) { const g = await myGolfer(uid, b.id); await sb.from('golfers').update({ color: E.clamp(+b.color || 0, 0, 5) }).eq('id', g.id); },
+  // pick one of his college offers and bank the NIL money
+  async commit({ uid, b }) {
+    const g = await myGolfer(uid, b.id), list = g.offers?.list || [], o = list[+b.i];
+    if (!o) no('That offer has gone.');
+    const { data: claimed } = await sb.from('golfers').update({ college: o.college, offers: null }).eq('id', g.id).not('offers', 'is', null).select('id');
+    if (!claimed?.length) no('He has already signed.');
+    await cash(uid, o.nil, 'nil', `${g.name}: NIL deal with ${o.college}`);
+    await addNews(uid, [`${g.name} commits to ${o.college} with a ${fmt$(o.nil)} NIL deal.`]);
+    return { msg: `${g.name} commits to ${o.college}. ${fmt$(o.nil)} is in the bank.` };
+  },
   async college({ uid, b }) {
     const g = await myGolfer(uid, b.id);
     if (!E.isCol(g.tour)) no('Only college golfers change schools.');
+    if (g.offers) no('Pick one of his offers first.');
     if (!E.COLLEGES.includes(b.college)) no('Pick a college.');
     await sb.from('golfers').update({ college: b.college, tour: COLLEGE_TOUR(b.college) }).eq('id', g.id);
   },

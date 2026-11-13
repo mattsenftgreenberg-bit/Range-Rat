@@ -5,13 +5,14 @@
 import {
   sb, E, settings, clockSecretOk, json, CORS, etParts, etDate, etInstant, TORDER, RIVALS, rawCo, coLift, coachRatings,
   fairPrice, fameOf, pBook, golferRow, insertGolfers, marketProspect, valueOf, canSell, saleChanceDay, cash, addNews,
-  addSkill, trainOnce, fmt$, lesson,
+  addSkill, trainOnce, fmt$, lesson, ageOf, classOf, seasonal, collegeOffers, Y,
 } from '../_shared/common.ts';
 
 const ZONE = Math.round(E.FIELD * 0.2);
 const lastDay = (y: number, m: number) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+// A season is one week, Monday to Sunday; Sunday is the Finale.
+const weekEnd = (start: string) => { const d = new Date(Date.parse(start + 'T12:00:00Z')); d.setUTCDate(d.getUTCDate() + ((7 - d.getUTCDay()) % 7)); return d.toISOString().slice(0, 10); };
 const iso = (y: number, m: number, d: number) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-const ageOf = (y: number) => (y <= 4 ? 17 + y : y <= 20 ? Math.round(22 + (y - 5) * 1.8) : 29 + y);
 const stam = (g: any) => E.clamp(5 - Math.round((g.fatigue || 0) / 20), 0, 5);
 const binom = (n: number, p: number) => { let k = 0; for (let i = 0; i < n; i++) if (Math.random() < p) k++; return k; };
 function shuffle<T>(a: T[]) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -48,7 +49,7 @@ function aiCoachRow(seed: number, L: number) {
   const raw = rawCo('ai' + seed), co = coLift(raw, peak), price = Math.max(250, Math.round(fairPrice(co, { wins, titles, best }) * (0.75 + r() * 0.6) / 50) * 50);
   const given = Math.floor(r() * 400), sk = E.rollProspect(peak).sk;
   return {
-    row: golferRow({ name, country: c, sk, tour: best, yr: 30 }, {
+    row: golferRow({ name, country: c, sk, tour: best, yr: Y.last }, {
       stable: RIVALS[Math.floor(r() * RIVALS.length)], retired: true, career: false, ret_age: 48 + Math.floor(r() * 24), best: peak, sessions: 0,
       stats: { ev: 0, cuts: 0, wins, top10: 0, earn: Math.round(E.TOURS[best].purse * (0.05 + r() * 0.4) * (4 + r() * 14) / 1000) * 1000, rounds: 0, par: 0, low: null },
       trophies: Array.from({ length: titles }, (_, i) => ({ s: i + 1, n: E.TOURS[best].name + ' season title', t: best, title: true })),
@@ -57,12 +58,23 @@ function aiCoachRow(seed: number, L: number) {
     sec: { ce: sk, peak: 1, agg: 0, co: raw },
   };
 }
+// Tour regulars. Junior and college regulars are a fresh crop each season; pro and senior regulars stay.
 async function fixedPools(season: number, tours: string[]) {
   const rows: any[] = [], secs: any[] = [];
   for (const tour of tours) {
+    if (tour === 'jr') {
+      // juniors, 15 to 17, a little behind college freshmen
+      E.pool('col0', 'J' + season).forEach((a: any, i: number) => {
+        const yr = 1 + (i % 3), sk: any = {};
+        for (const k in a.sk) sk[k] = Math.round(E.clamp(a.sk[k] - (a.yr - 1) * 3.5 - 10 + (yr - 1) * 2.5, 25, 99));
+        rows.push(golferRow({ ...a, college: null, sk, tour, yr }, { stable: null, career: false, pool_season: season, fatigue: 0, sessions: 0 }));
+        secs.push({ ce: sk, peak: a.peak, agg: a.agg });
+      });
+      continue;
+    }
     const col = E.isCol(tour);
     for (const a of E.pool(tour, season)) {
-      rows.push(golferRow({ ...a, tour, yr: col ? a.yr : 10 }, { stable: null, career: false, pool_season: col ? season : null, fatigue: 0, sessions: 0 }));
+      rows.push(golferRow({ ...a, tour, yr: col ? a.yr + 3 : 13 }, { stable: null, career: false, pool_season: col ? season : null, fatigue: 0, sessions: 0 }));
       secs.push({ ce: a.sk, peak: a.peak, agg: a.agg });
     }
   }
@@ -71,7 +83,7 @@ async function fixedPools(season: number, tours: string[]) {
 async function ensureWorld(s: any, done: string[]) {
   const { data: w } = await sb.from('world').select('*').maybeSingle();
   if (w) return w;
-  const p = etParts(), start = etDate(), end = iso(p.y, p.m, lastDay(p.y, p.m));
+  const start = etDate(), end = weekEnd(start);
   const { data: claimed, error } = await sb.from('world').insert({ season: 1, season_start: start, season_end: end, meta: { setting_up: true } }).select('id');
   if (error || !claimed?.length) return null; // another call is setting up
   await fixedPools(1, TORDER);
@@ -90,7 +102,7 @@ async function scheduleSeason(s: any, season: number, start: string, end: string
   const days: { y: number; m: number; d: number }[] = [];
   for (let t = Date.parse(start + 'T12:00:00Z'); t <= Date.parse(end + 'T12:00:00Z'); t += 864e5) {
     const d = new Date(t), wd = d.getUTCDay();
-    if (s.weekends || (wd >= 1 && wd <= 5)) days.push({ y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate() });
+    if (wd >= 0) days.push({ y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate() });
   }
   if (!days.length) return 0;
   const { data: have } = await sb.from('events').select('tour,starts_at').eq('season', season).eq('test', false).not('tour', 'like', 'qf%');
@@ -112,8 +124,10 @@ async function scheduleSeason(s: any, season: number, start: string, end: string
 async function topUpSeason(s: any, done: string[]) {
   const { data: w } = await sb.from('world').select('*').maybeSingle();
   if (!w || w.meta?.setting_up) return;
-  const stamp = `${w.season}|${!!s.weekends}|${(s.hours || []).join(',')}`;
+  const stamp = `wk|${w.season}|${(s.hours || []).join(',')}`;
   if (w.meta?.sched === stamp && Date.now() - Date.parse(w.meta?.sched_at || 0) < 6 * 3600e3) return;
+  const { count: jr } = await sb.from('golfers').select('id', { count: 'exact', head: true }).eq('tour', 'jr').eq('pool_season', w.season);
+  if (!jr) { await fixedPools(w.season, ['jr']); done.push('junior regulars created'); }
   const n = await scheduleSeason(s, w.season, etDate() > w.season_start ? etDate() : w.season_start, w.season_end);
   await sb.from('world').update({ meta: { ...w.meta, sched: stamp, sched_at: new Date().toISOString() } }).eq('id', 1);
   if (n) done.push(`scheduled ${n} tour events`);
@@ -123,7 +137,7 @@ async function topUpSeason(s: any, done: string[]) {
 // A two-round, no-cut event every `qf_every_min` minutes, all day. Open to any golfer, entered by hand only.
 // One Quick-Fire Open per level, all teeing off together: college (all three conferences), then each pro and senior tour.
 // Their tour is written 'qf:<level>', e.g. 'qf:col' or 'qf:p1'.
-const QT = ['col', 'p3', 'p2', 'p1', 'c2', 'c1'];
+const QT = ['jr', 'col', 'p3', 'p2', 'p1', 'c2', 'c1'];
 const isQ = (tour: string) => String(tour).startsWith('qf');
 const qLevel = (tour: string) => String(tour).split(':')[1] || '';
 async function scheduleQuick(s: any, done: string[]) {
@@ -145,9 +159,9 @@ async function lockQuick(ev: any, s: any, done: string[]) {
   if (!ids.length) { await sb.from('events').delete().eq('id', ev.id); done.push('Quick-Fire skipped: nobody entered'); return; }
   const { data: w } = await sb.from('world').select('season').single();
   // the rest of the field: regulars from this level
-  const lv = qLevel(ev.tour), tours = lv === 'col' ? ['col0', 'col1', 'col2'] : [lv];
+  const lv = qLevel(ev.tour), tours = lv === 'col' ? ['col0'] : [lv];
   const { data: pool } = await sb.from('golfers').select('id,tour,pool_season').in('tour', tours).eq('career', false).eq('retired', false).is('manager_id', null);
-  const reg = shuffle((pool || []).filter((g: any) => !E.isCol(g.tour) || g.pool_season === w!.season));
+  const reg = shuffle((pool || []).filter((g: any) => !seasonal(g.tour) || g.pool_season === w!.season));
   const fl = ids.map((id: string) => ({ id, managed: true })).concat(reg.slice(0, Math.max(0, E.FIELD - ids.length)).map((g: any) => ({ id: g.id, managed: false })));
   const rs = new Map<string, number>();
   for (let i = 0; i < fl.length; i += 60) {
@@ -212,7 +226,7 @@ async function lockEvent(ev: any, done: string[]) {
   const { data: car } = await sb.from('golfers').select('id').eq('tour', ev.tour).eq('retired', false).is('manager_id', null).eq('career', true);
   for (const g of shuffle(car || [])) if (field.length < E.FIELD) field.push({ id: g.id, managed: false });
   let q = sb.from('golfers').select('id').eq('tour', ev.tour).eq('career', false).eq('retired', false);
-  q = col ? q.eq('pool_season', w!.season) : q.is('pool_season', null);
+  q = seasonal(ev.tour) ? q.eq('pool_season', w!.season) : q.is('pool_season', null);
   const { data: pool } = await q;
   for (const g of shuffle(pool || [])) { if (field.length >= E.FIELD) break; field.push({ id: g.id, managed: false }); }
   const fl = field.slice(0, E.FIELD);
@@ -415,6 +429,14 @@ async function dailyRefresh(s: any, done: string[]) {
     for (const u of 'sml') if (!g.trained?.[u]) for (const k of E.SUB[u]) g.sk[k] = Math.max(20, g.sk[k] - s.rust_per_day);
     await sb.from('golfers').update({ sk: g.sk, trained: {}, sessions: s.sessions_per_day, fatigue: Math.max(0, g.fatigue - s.recovery_per_day), carry: g.carry, coach_id: g.coach_id }).eq('id', g.id);
   }
+  // college offers nobody answered: after 2 days he takes the best
+  const { data: undecided } = await sb.from('golfers').select('id,name,manager_id,offers').not('offers', 'is', null);
+  for (const g of undecided || []) {
+    if (Date.now() - Date.parse(g.offers.at) < 2 * 864e5 || !g.offers.list?.length) continue;
+    const o = g.offers.list[0];
+    await sb.from('golfers').update({ college: o.college, offers: null }).eq('id', g.id);
+    if (g.manager_id) { await cash(g.manager_id, o.nil, 'nil', `${g.name}: NIL deal with ${o.college}`); say(g.manager_id, `${g.name} took the best offer and signed with ${o.college}: ${fmt$(o.nil)} NIL deal.`); }
+  }
   // coaches: rival managers book what's left of each coach's day
   const { data: cs } = await sb.from('golfers').select('id,name,manager_id,sk,best,stats,trophies,seasons,tour,cr,stable').eq('retired', true).not('cr', 'is', null);
   const cids = (cs || []).map((c: any) => c.id);
@@ -450,12 +472,12 @@ async function dailyRefresh(s: any, done: string[]) {
   const week = new Date(Date.now() - 7 * 864e5).toISOString();
   await sb.from('golfers').update({ ask: null, listed_at: null }).is('manager_id', null).not('ask', 'is', null).lt('listed_at', week);
   const { count } = await sb.from('golfers').select('id', { count: 'exact', head: true }).is('manager_id', null).not('ask', 'is', null).eq('retired', false);
-  const want = Math.max(0, 6 - (count || 0)), kinds = [['col', 3, 63], ['p3', 6, 67], ['p2', 8, 72], ['p1', 9, 77]];
+  const want = Math.max(0, 6 - (count || 0)), kinds = [['col', 6, 63], ['p3', 9, 67], ['p2', 11, 72], ['p1', 12, 77]];
   if (want) {
     const rows: any[] = [], sx: any[] = [];
     for (let i = 0; i < want; i++) {
       const [t, yr, mu] = kinds[Math.floor(Math.random() * kinds.length)] as [string, number, number];
-      const tour = t === 'col' ? 'col' + Math.floor(Math.random() * 3) : t, m = marketProspect(tour, yr, mu);
+      const tour = t === 'col' ? 'col0' : t, m = marketProspect(tour, yr, mu);
       const ask = Math.round(valueOf(m.p.sk, yr) * (0.85 + Math.random() * 0.45) / 500) * 500;
       rows.push(golferRow({ ...m, arch: m.p.arch, sk: m.p.sk }, { stable: E.pick(RIVALS), career: true, ask, listed_at: new Date().toISOString(), color: Math.floor(Math.random() * 6) }));
       sx.push({ ce: m.p.ce, peak: m.p.peak, agg: m.p.agg });
@@ -471,8 +493,11 @@ async function rollover(w: any, s: any, done: string[]) {
   const season = w.season, news: Record<string, string[]> = {};
   const say = (mid: string, t: string) => (news[mid] ??= []).push(t);
   const moves: any[] = [];
+  // one collegiate tour now: fold any old college circuits into it
+  await sb.from('standings').update({ tour: 'col0' }).in('tour', ['col1', 'col2']).eq('season', season);
+  await sb.from('golfers').update({ tour: 'col0' }).in('tour', ['col1', 'col2']);
   for (const tour of TORDER) {
-    const col = E.isCol(tour), T = E.TOURS[tour];
+    const col = seasonal(tour), T = E.TOURS[tour];
     const { data: st } = await sb.from('standings').select('golfer_id,pts,wins,earn').eq('tour', tour).eq('season', season);
     const sm = new Map((st || []).map((x: any) => [x.golfer_id, x]));
     const { data: car } = await sb.from('golfers').select('*').eq('tour', tour).eq('retired', false).eq('career', true);
@@ -486,10 +511,16 @@ async function rollover(w: any, s: any, done: string[]) {
       const g = x.g; if (!g.career) continue;
       const rank = x.rank, y = g.yr, top = rank <= ZONE, bot = rank > all.length - ZONE;
       let next = tour, note = '', retire = false;
-      if (y === 4) { next = top ? 'p2' : 'p3'; note = `He turns professional on the ${E.TOURS[next].name}.`; }
-      else if (y === 20) { next = tour === 'p1' || (tour === 'p2' && top) ? 'c1' : 'c2'; note = `He moves to the senior game on the ${E.TOURS[next].name}.`; }
-      else if (y >= 30) { retire = true; note = 'That was his 30th and final season. He retires and opens a coaching practice.'; }
-      else if (col) note = `He comes back for his ${E.CLASS[y].toLowerCase()} year.`;
+      let offers: any = null;
+      if (y === Y.col - 1) {
+        next = 'col0'; offers = collegeOffers(g, rank, all.length);
+        note = g.manager_id ? `He turns 18 and the colleges come calling: ${offers.map((o: any) => `${o.college} (${fmt$(o.nil)})`).join(', ')}. Pick one on his Roster page within 2 days, or he takes the best offer.` : `He heads to ${offers[0].college}.`;
+      }
+      else if (y === Y.pro - 1) { next = top ? 'p2' : 'p3'; note = `He turns professional on the ${E.TOURS[next].name}.`; }
+      else if (y === Y.sen - 1) { next = tour === 'p1' || (tour === 'p2' && top) ? 'c1' : 'c2'; note = `He moves to the senior game on the ${E.TOURS[next].name}.`; }
+      else if (y >= Y.last) { retire = true; note = `That was his ${Y.last}rd and final season. He retires and opens a coaching practice.`; }
+      else if (tour === 'jr') note = `He's back on the Junior Tour at ${ageOf(y + 1)}.`;
+      else if (col) note = `He comes back for his ${classOf(y + 1).toLowerCase()} year.`;
       else if (top && E.UP[tour]) { next = E.UP[tour]; note = `Promoted to the ${E.TOURS[next].name}.`; }
       else if (bot && E.DOWN[tour]) { next = E.DOWN[tour]; note = `Relegated to the ${E.TOURS[next].name}.`; }
       else note = `He stays on the ${T.name}.`;
@@ -497,8 +528,9 @@ async function rollover(w: any, s: any, done: string[]) {
       const trophies = g.trophies || [];
       if (rank === 1 && x.pts > 0) trophies.push({ s: season, n: T.name + ' season title', t: tour, title: true });
       const seasons = (g.seasons || []).concat([{ s: y, gs: season, tour, rank, pts: x.pts, wins: x.wins, earn: x.earn + bonus }]);
-      if (!retire && y >= 15) { const k = y >= 20 ? 1 : 0.5; g.sk.pow = Math.max(20, g.sk.pow - 0.8 * k); g.sk.lacc = Math.max(20, g.sk.lacc - 0.3 * k); if (y >= 20) for (const q of ['wedge', 'pitch', 'chip', 'bunker', 'sputt', 'lputt', 'iacc', 'idist']) g.sk[q] = Math.max(20, g.sk[q] - 0.3); }
+      if (!retire && y >= 18) { const k = y >= 23 ? 1 : 0.5; g.sk.pow = Math.max(20, g.sk.pow - 0.8 * k); g.sk.lacc = Math.max(20, g.sk.lacc - 0.3 * k); if (y >= 23) for (const q of ['wedge', 'pitch', 'chip', 'bunker', 'sputt', 'lputt', 'iacc', 'idist']) g.sk[q] = Math.max(20, g.sk[q] - 0.3); }
       const upd: any = { yr: y + 1, tour: next, seasons, trophies, sk: g.sk, s_pts: 0, conf: 0 };
+      if (offers) { if (g.manager_id) Object.assign(upd, { college: null, offers: { list: offers, at: new Date().toISOString() } }); else upd.college = offers[0].college; }
       if (retire) {
         const { data: sec } = await sb.from('golfer_secrets').select('co').eq('golfer_id', g.id).single();
         const o = coachRatings(g, sec?.co || rawCo(g.id));
@@ -513,8 +545,8 @@ async function rollover(w: any, s: any, done: string[]) {
   }
   for (const m of moves) await sb.from('golfers').update(m.upd).eq('id', m.id);
   const next = season + 1, d0 = new Date(Date.parse(w.season_end + 'T12:00:00Z') + 864e5);
-  const y = d0.getUTCFullYear(), m = d0.getUTCMonth() + 1, start = iso(y, m, 1), end = iso(y, m, lastDay(y, m));
-  await fixedPools(next, ['col0', 'col1', 'col2']);
+  const start = d0.toISOString().slice(0, 10), end = weekEnd(start);
+  await fixedPools(next, ['jr', 'col0']);
   await sb.from('world').update({ season: next, season_start: start, season_end: end }).eq('id', 1);
   await scheduleSeason(s, next, start, end);
   for (const mid in news) await addNews(mid, news[mid]);
