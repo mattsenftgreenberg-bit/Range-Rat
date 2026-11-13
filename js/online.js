@@ -100,7 +100,7 @@ async function load(){
 function nav(){
   const n=document.getElementById('nav');if(!n)return;
   if(!D.me||ui.view==='auth'){n.innerHTML='';return;}
-  const tabs=[['stable','Roster'],['events','Events'],['standings','Standings'],['market','Market'],['coaches','Coaches'],['news','News']].concat(D.me.is_admin?[['admin','Admin']]:[]);
+  const tabs=[['stable','Roster'],['events','Events'],['standings','Standings'],['market','Market'],['coaches','Coaches'],['news','News'],['guide','How it works']].concat(D.me.is_admin?[['admin','Admin']]:[]);
   n.innerHTML=`<span class="cash${D.me.cash<0?' red':''}">${fmt$(D.me.cash)}</span>`+tabs.map(([v,l])=>`<button class="btn sm${ui.view===v||(v==='events'&&ui.view==='board')?' on':''}" data-act="go" data-v="${v}">${l}</button>`).join('')+`<button class="btn sm" data-act="signOut">Sign out</button>`;
 }
 function flash(){return `${ui.err?`<p class="under" role="alert">${esc(ui.err)}</p>`:''}`;}
@@ -117,10 +117,10 @@ auth(){const a=ui.auth,m=a.mode;
  ${a.msg?`<p class="${a.err?'under':'hand'}" role="status">${esc(a.msg)}</p>`:''}
  <div class="row" style="justify-content:flex-start"><button class="btn primary" type="submit" ${a.busy?'disabled':''}>${a.busy?'Working…':btn}</button></div>
  <div class="row" style="justify-content:flex-start">${m==='in'?'<button class="btn sm" type="button" data-act="authMode" data-v="up">Create an account</button><button class="btn sm" type="button" data-act="authMode" data-v="forgot">Forgot password</button>':m!=='newpass'?'<button class="btn sm" type="button" data-act="authMode" data-v="in">Back to sign in</button>':''}</div>
- <p class="muted small">Your old single-player career is still at <a href="solo/">the solo game</a>.</p>
+ <p class="muted small"><button class="linkbtn" type="button" data-act="go" data-v="guide">How the game works</button> · Your old single-player career is still at <a href="solo/">the solo game</a>.</p>
 </form>`;},
 join:()=>`<section class="intro"><p class="eyebrow">Welcome to the shared world</p><h1>Name your roster</h1><p class="lede">Everyone starts fresh with ${fmt$(S().start_cash)}. Events run on weeknight evenings, 6 to 10pm New York time, and everyone's golfers play in the same fields.</p></section>
-<section class="sec stack"><label class="field" for="stName"><span>Roster name</span><input id="stName" type="text" maxlength="30" value="${esc(ui.pros.stable||'')}" placeholder="e.g. Back Nine Management"></label>${flash()}<div class="row" style="justify-content:flex-start"><button class="btn primary" data-act="join" ${ui.busy?'disabled':''}>Open the roster</button></div><p class="muted small">Your old single-player career is still at <a href="solo/">the solo game</a>.</p></section>`,
+<section class="sec stack"><label class="field" for="stName"><span>Roster name</span><input id="stName" type="text" maxlength="30" value="${esc(ui.pros.stable||'')}" placeholder="e.g. Back Nine Management"></label>${flash()}<div class="row" style="justify-content:flex-start"><button class="btn primary" data-act="join" ${ui.busy?'disabled':''}>Open the roster</button></div><p class="muted small"><button class="linkbtn" type="button" data-act="go" data-v="guide">How the game works</button> · Your old single-player career is still at <a href="solo/">the solo game</a>.</p></section>`,
 scout(){const p=D.me.prospect,full=mine().length>=S().max_golfers,P=ui.pros;
   if(!P.college)P.college=pick(COLLEGES);
   if(!p)return `<section class="intro"><h1>Scout a junior</h1><p class="lede">A junior costs nothing and starts as a college freshman.</p></section><section class="sec">${flash()}<button class="btn primary" data-act="scout" data-v="fresh" ${full||ui.busy?'disabled':''}>Send the scouts out</button>${full?`<p class="muted small">Your roster is full at ${S().max_golfers} active golfers.</p>`:''}</section>`;
@@ -202,7 +202,7 @@ standings(){const tours=TORDER,t=ui.tour&&ui.tour!=='all'?ui.tour:(G()&&!G().ret
   const rows=ui.stand&&ui.stand.t===t?ui.stand.rows:null;if(!rows)loadStand(t);
   return `<section class="intro"><p class="eyebrow">Season ${D.world?D.world.season:1}</p><h1>Standings</h1><p class="lede">Points from finished events this season. At the end of the month the top ${Math.round(FIELD*.2)} on each pro tour go up and the bottom ${Math.round(FIELD*.2)} go down.</p></section>
 <section class="sec"><div class="row" style="justify-content:flex-start;flex-wrap:wrap">${tours.map(x=>`<button class="btn sm${t===x?' on':''}" data-act="stour" data-v="${x}">${T(x).name}</button>`).join('')}</div></section>
-<section class="sec">${!rows?'<p class="muted">Loading…</p>':!rows.length?'<p class="muted">No finished events on this tour yet this season.</p>':`<div class="scroll tall"><table class="tbl"><thead><tr><th class="num">#</th><th>Golfer</th><th>Roster</th><th class="num">Points</th><th class="num">Wins</th><th class="num">Earned</th></tr></thead><tbody>${rows.map((r,i)=>`<tr class="${r.golfers&&r.golfers.manager_id===D.user.id?'me':r.golfers&&r.golfers.manager_id?'now':''}"><td class="num">${i+1}</td><td>${r.golfers?flagHTML(r.golfers.country)+esc(r.golfers.name):'?'}</td><td class="small">${esc(r.golfers&&r.golfers.stable||'Tour regular')}</td><td class="num">${fmtPts(r.pts)}</td><td class="num">${r.wins||''}</td><td class="num">${fmt$(r.earn)}</td></tr>`).join('')}</tbody></table></div>`}</section>`;},
+<section class="sec">${!rows?'<p class="muted">Loading…</p>':!rows.length?'<p class="muted">No finished events on this tour yet this season.</p>':`<div class="scroll tall"><table class="tbl"><thead><tr><th class="num">#</th><th>Golfer</th><th>Roster</th><th class="num">Points</th><th class="num">Wins</th><th class="num">Earned</th></tr></thead><tbody>${rows.map((r,i)=>`<tr class="${r.golfers&&r.golfers.manager_id===D.user.id?'me':r.golfers&&r.golfers.manager_id?'now':''}"><td class="num">${i+1}</td><td>${r.golfers?flagHTML(r.golfers.country)+esc(r.golfers.name)+ageTag(r.golfers.yr,t):'?'}</td><td class="small">${esc(r.golfers&&r.golfers.stable||'Tour regular')}</td><td class="num">${fmtPts(r.pts)}</td><td class="num">${r.wins||''}</td><td class="num">${fmt$(r.earn)}</td></tr>`).join('')}</tbody></table></div>`}</section>`;},
 market(){const full=mine().length>=S().max_golfers,list=D.market.filter(m=>m.manager_id!==D.user.id);
   return `<section class="intro"><h1>Transfer market</h1><p class="lede">Golfers listed by rival coaches and by other managers. Buying from a manager pays them directly.</p></section>
 <section class="sec">${flash()}${ui.msg?`<p class="hand">${esc(ui.msg)}</p>`:''}<div class="shop">
@@ -212,6 +212,7 @@ market(){const full=mine().length>=S().max_golfers,list=D.market.filter(m=>m.man
 coaches(){const list=D.coaches.slice().sort((a,b)=>(b.cr.o?coOvrC(b.cr.o):0)-(a.cr.o?coOvrC(a.cr.o):0));
   return `<section class="intro"><h1>Coaches</h1><p class="lede">Retired players coach. Each gives ${S().lessons_per_day} lessons a day across every manager, so the good ones book up. The best coaching multiplies a range session by up to ×${S().coach_max}. Pick a coach for a golfer on his Roster page.</p></section>
 <section class="sec">${flash()}<div class="scroll tall"><table class="tbl"><thead><tr><th>Coach</th><th class="num">Short</th><th class="num">Irons</th><th class="num">Long</th><th class="num">Head</th><th class="num">Fee</th><th class="num">Left today</th></tr></thead><tbody>${list.map(c=>{const o=c.cr.o||{};return `<tr class="${c.manager_id===D.user.id?'me':''}"><td>${flagHTML(c.country)}${esc(c.name)} <span class="muted small">${esc(c.stable||'')}</span></td>${'smlx'.split('').map(u=>`<td class="num">${o[u]??'–'}</td>`).join('')}<td class="num">${c.manager_id===D.user.id?'Yours':fmt$(c.cr.price)}</td><td class="num">${c.cr.left}</td></tr>`;}).join('')}</tbody></table></div></section>`;},
+guide:()=>guideHTML(),
 news:()=>`<section class="intro"><h1>News</h1><p class="lede">${esc(D.me.name)}</p></section><section class="sec">${(D.me.news||[]).length?(D.me.news||[]).map(n=>`<p>${esc(n.t)} <span class="muted small">${when(n.at)}</span></p>`).join(''):'<p class="muted">Nothing yet.</p>'}
  <h2>Roster name</h2><div class="row" style="justify-content:flex-start"><input id="stName" type="text" maxlength="30" value="${esc(D.me.name)}"><button class="btn sm" data-act="rename">Rename</button></div>${flash()}</section>`,
 admin(){const s=S();
@@ -255,7 +256,7 @@ function boardHTML(b,e){const rows=boardRows(b,e),fin=e.status==='final',cutDone
   const live=!fin&&phase(e)==='live';
   const row=(r,cl)=>{const i=rows.indexOf(r),chip=proj!==null&&!r.p.cut&&(r.p.managed)?(i>lastIn?'<span class="chip out">Outside the cut</span>':'<span class="chip">Inside the cut</span>'):r.p.cut&&r.p.managed?'<span class="chip">Missed the cut</span>':'';
     const o0=r.p.odds0?oddsLabel(r.p.odds0):'';
-    return `<tr class="${r.p.mine?'me':r.p.managed?'mine':''}${cl?' cutline':''}"><td class="num">${r.pos}</td><td class="nm">${flagHTML(r.p.country)}${esc(r.p.name)}${r.p.managed?`<small class="sch">${esc(r.p.stable||'')}</small>`:isCol(e.tour)?`<small class="sch">${esc(r.p.college||'')}</small>`:''}${chip}${r.p.managed?` <button class="btn xs" data-act="watch" data-v="${r.p.id}">${ui.watch===r.p.id?'Watching':'Watch'}</button>`:''}</td><td class="num odds">${fin?(r.p.pay?`${fmt$(r.p.pay)}${r.p.pts?`<small class="o0">${fmtPts(r.p.pts)} pts</small>`:''}`:''):`${r.odds||(r.p.cut?'':'–')}${o0?`<small class="o0">from ${o0}</small>`:''}`}</td><td class="num${r.tot<0?' under':''}">${fmtPar(r.tot)}</td><td class="num">${fin?r.strokes.reduce((a,c)=>a+c,0)||'':r.thru===18&&r.rd===R?'F':r.thru||'–'}</td></tr>`;};
+    return `<tr class="${r.p.mine?'me':r.p.managed?'mine':''}${cl?' cutline':''}"><td class="num">${r.pos}</td><td class="nm">${flagHTML(r.p.country)}${esc(r.p.name)}${ageTag(r.p.yr,e.tour.startsWith('qf:col')?'col0':e.tour)}${r.p.managed?`<small class="sch">${esc(r.p.stable||'')}</small>`:isCol(e.tour)?`<small class="sch">${esc(r.p.college||'')}</small>`:''}${chip}${r.p.managed?` <button class="btn xs" data-act="watch" data-v="${r.p.id}">${ui.watch===r.p.id?'Watching':'Watch'}</button>`:''}</td><td class="num odds">${fin?(r.p.pay?`${fmt$(r.p.pay)}${r.p.pts?`<small class="o0">${fmtPts(r.p.pts)} pts</small>`:''}`:''):`${r.odds||(r.p.cut?'':'–')}${o0?`<small class="o0">from ${o0}</small>`:''}`}</td><td class="num${r.tot<0?' under':''}">${fmtPar(r.tot)}</td><td class="num">${fin?r.strokes.reduce((a,c)=>a+c,0)||'':r.thru===18&&r.rd===R?'F':r.thru||'–'}</td></tr>`;};
   const mineR=rows.filter(r=>r.p.mine),others=rows.filter(r=>r.p.managed&&!r.p.mine),full=ui.full,show=full?rows:rows.slice(0,10);
   const head=`<tr><th class="num">Pos</th><th>Golfer</th><th class="num">${fin?'Won':'Odds'}</th><th class="num">Par</th><th class="num">${fin?'Tot':'Thru'}</th></tr>`;
   return `<section class="board"><div class="row"><h2>${fin?'Final leaderboard':live?`Round ${R+1}${isQ(e)?' of '+nR(e):''}, live`:'Waiting for the first tee shot'}</h2><span class="chip cutchip">${cutTxt}</span></div>
@@ -308,9 +309,9 @@ async function loadPreview(e){
   const rows=(gs.data||[]).map(g=>{const s=st.get(g.id),auto=e.test||g.enter_rule==='all'||(g.enter_rule==='signature'&&['Signature','Finale'].includes(e.type));return{g,how:s==='in'?'Entered':s==='out'?null:auto?'Entered automatically':null};}).filter(r=>r.how);
   rows.sort((a,b)=>ovr(b.g.sk)-ovr(a.g.sk));ui.preview={eid:e.id,rows};}
 function previewHTML(e){const P=ui.preview&&ui.preview.eid===e.id?ui.preview.rows:null;
-  return `<section class="sec"><h2>The field so far</h2>${!P?'<p class="muted">Loading…</p>':!P.length?'<p class="muted">No managers\u2019 golfers are in yet.</p>':`<div class="scroll"><table class="tbl"><thead><tr><th>Golfer</th><th>Roster</th><th class="num">Overall</th></tr></thead><tbody>${P.map(r=>`<tr class="${r.g.manager_id===D.user.id?'me':'now'}"><td>${flagHTML(r.g.country)}${esc(r.g.name)}${isCol(e.tour)?` <span class="muted small">${esc(r.g.college||'')}</span>`:''}${r.how==='Entered automatically'?' <span class="muted small">(auto)</span>':''}</td><td class="small">${esc(r.g.stable||'')}</td><td class="num">${Math.round(ovr(r.g.sk))}</td></tr>`).join('')}</tbody></table></div>`}
+  return `<section class="sec"><h2>The field so far</h2>${!P?'<p class="muted">Loading…</p>':!P.length?'<p class="muted">No managers\u2019 golfers are in yet.</p>':`<div class="scroll"><table class="tbl"><thead><tr><th>Golfer</th><th>Roster</th><th class="num">Overall</th></tr></thead><tbody>${P.map(r=>`<tr class="${r.g.manager_id===D.user.id?'me':'now'}"><td>${flagHTML(r.g.country)}${esc(r.g.name)}${ageTag(r.g.yr,r.g.tour)}${isCol(e.tour)?` <span class="muted small">${esc(r.g.college||'')}</span>`:''}${r.how==='Entered automatically'?' <span class="muted small">(auto)</span>':''}</td><td class="small">${esc(r.g.stable||'')}</td><td class="num">${Math.round(ovr(r.g.sk))}</td></tr>`).join('')}</tbody></table></div>`}
   <p class="muted small">${P?`${P.length} golfer${P.length===1?'':'s'} from managers\u2019 rosters so far. `:''}When entries close, tour regulars fill the rest of the ${FIELD} spots. Auto entries can still withdraw before then.</p></section>`;}
-async function loadStand(t){const {data}=await SB.from('standings').select('pts,wins,earn,golfers(name,country,stable,manager_id)').eq('tour',t).eq('season',D.world?D.world.season:1).order('pts',{ascending:false}).limit(200);ui.stand={t,rows:data||[]};if(ui.view==='standings')render();}
+async function loadStand(t){const {data}=await SB.from('standings').select('pts,wins,earn,golfers(name,country,stable,manager_id,yr)').eq('tour',t).eq('season',D.world?D.world.season:1).order('pts',{ascending:false}).limit(200);ui.stand={t,rows:data||[]};if(ui.view==='standings')render();}
 
 /* ---------- watching a golfer: the hole map, played on the clock ---------- */
 // The server reveals each hole when it's reached on the clock. Live, we animate each new hole as it arrives;
@@ -419,6 +420,57 @@ function drawMap(dt){
   c.fillStyle='rgba(0,0,0,.3)';c.beginPath();c.ellipse(bx+lift*.3,by+u*.12,br,br*.6,0,0,6.3);c.fill();
   c.fillStyle='#fff';c.strokeStyle=mineG?COLORS[mineG.color]||'#222':'#222';c.lineWidth=Math.max(1.5,u*.16);c.beginPath();c.arc(bx,by-lift,br,0,6.3);c.fill();c.stroke();
 }
+
+/* ---------- the guide: how Range Rat works ---------- */
+// "19 · So" for college, "Age 34" otherwise
+const ageTag=(yr,tour)=>yr?`<small class="age">${isCol(tour)?`${ageOf(yr)} · ${CLS[yr-1]||''}`:`Age ${ageOf(yr)}`}</small>`:'';
+function guideHTML(){const s=S(),ev=Math.round(4*s.round_min),Z=Math.round(FIELD*.2),cy=s.coach_age_yr,ca=ageOf(cy);
+  const stage=(cls,name,yrs,ages,body)=>`<div class="gstage ${cls}"><div class="ghead"><b>${name}</b><span>${yrs}</span><span class="gage">${ages}</span></div><div class="gbody">${body}</div></div>`;
+  return `<section class="intro"><p class="eyebrow">How it works</p><h1>The game in five minutes</h1><p class="lede">Range Rat is a golf management game. You never hit a shot. You sign young golfers, decide how they train, pick their events and watch them play on the clock alongside everyone else's golfers. Each golfer has hidden ceilings, a temperament and good and bad days, so no two careers go the same way.</p>${D.me?'':'<button class="btn sm" data-act="go" data-v="auth">← Back to sign in</button>'}</section>
+
+<section class="sec gsec"><h2>Time in Range Rat</h2>
+<div class="gfacts">
+ <div><b>1 month</b><span>One season. A new one starts on the 1st.</span></div>
+ <div><b>30 seasons</b><span>A full career, about two and a half years of real time.</span></div>
+ <div><b>~${s.events_per_season}</b><span>Events per tour each season, on weeknight evenings, 6 to 10pm New York time.</span></div>
+ <div><b>~${ev} min</b><span>One event: four rounds, one hole every ${Math.round(s.round_min*60/18)} seconds, played live for everyone at once.</span></div>
+</div>
+<p>Every night at midnight New York time the world refreshes: each golfer gets a new range session, recovers some stamina, and coaches open their diaries for the next day.</p></section>
+
+<section class="sec gsec"><h2>The life of a golfer</h2><p class="muted">A golfer moves up a year at the end of every season, so one calendar month is one year of his life on the course.</p>
+<div class="gline">
+${stage('col','College','Seasons 1 to 4','Ages 18 to 21',`<p>Every junior you sign starts as a college <b>freshman</b>, then plays his sophomore, junior and senior years. His school decides his circuit: the ${TOURS.col0.name}, ${TOURS.col1.name} or ${TOURS.col2.name} (16 schools each). You can change schools while he's in college.</p><p>When his senior year ends, the top ${Z} in his circuit's standings turn pro on the <b>${TOURS.p2.name}</b>. Everyone else starts on the <b>${TOURS.p3.name}</b>.</p>`)}
+${stage('pro','Professional','Seasons 5 to 20','Ages 22 to 49',`<p>Three tours, from bottom to top: <b>${TOURS.p3.name}</b>, <b>${TOURS.p2.name}</b> and <b>${TOURS.p1.name}</b>. At the end of every season the top ${Z} in the standings are promoted a tour and the bottom ${Z} are relegated.</p><p>From about age 40 his power and driving accuracy slowly start to fade.</p>`)}
+${stage('sen','Senior','Seasons 21 to 30','Ages 50 to 59',`<p>At 50 he moves to the senior game. Golfers coming off the ${TOURS.p1.name}, and the top ${Z} from the ${TOURS.p2.name}, start on the <b>${TOURS.c1.name}</b>. Everyone else starts on the <b>${TOURS.c2.name}</b>. The same promotion and relegation applies between the two.</p><p>His short game and irons now fade a little each season too.</p>`)}
+${stage('ret','Retirement','After season 30','Age 59 on',`<p>After his 30th season he retires and opens a coaching practice. You can also retire him early, any time from age ${ca} (season ${cy}).</p>`)}
+</div>
+<div class="scroll"><table class="tbl gtable"><thead><tr><th>Tour</th><th>Level</th><th class="num">Usual purse</th><th class="num">Entry fee</th></tr></thead><tbody>
+${['col','p3','p2','p1','c2','c1'].map(t=>`<tr><td>${t==='col'?'College circuits':TOURS[t].name}</td><td class="small">${{col:'Seasons 1–4',p3:'Pro, bottom',p2:'Pro, middle',p1:'Pro, top',c2:'Senior, lower',c1:'Senior, top'}[t]}</td><td class="num">${fmt$(TOURS[t].purse*s.purse_mult)}</td><td class="num">${TOURS[t].fee?fmt$(TOURS[t].fee*s.fee_mult):'Free'}</td></tr>`).join('')}
+</tbody></table></div><p class="muted small">Signature events and the season Finale pay more than a standard event; smaller events pay less.</p></section>
+
+<section class="sec gsec"><h2>Training</h2>
+<p>Each golfer gets <b>${s.sessions_per_day} range session${s.sessions_per_day>1?'s':''} a day</b>. A <b>drill</b> works one skill hard; a <b>general session</b> lifts a whole area (short game, irons, long game or the mental side) a little. A day off restores stamina.</p>
+<p>Every skill has a hidden <b>ceiling</b>. The scouts' grades hint at it, and gains shrink as he gets close. Areas he doesn't work on get slightly rusty each day. Tired golfers train and play worse, and every event costs some stamina.</p>
+<p><b>Standing orders</b> spend a session he didn't use by midnight, so a golfer keeps improving even on days you don't log in.</p></section>
+
+<section class="sec gsec"><h2>Events</h2>
+<p>Enter golfers by hand, or set an automatic rule for each one (every event, or only the big ones). Entries close <b>${s.deadline_min} minutes</b> before the start, then the field is set: managers' golfers first, then tour regulars, ${FIELD} in all.</p>
+<p>Four rounds. After two, the top ${CUT} and ties make the <b>cut</b>. Finishing positions earn prize money and <b>season points</b>. At the end of the month the season standings decide promotion and relegation and pay a bonus to the leaders: half a standard purse for the winner, then smaller bonuses down to the top ${Z}.</p>
+<p><b>Quick-Fire Opens</b> run every ${s.qf_every_min} minutes, all day, one for each level: college, each pro tour and each senior tour. They're two rounds with no cut and cost ${fmt$(s.qf_fee)} to enter. The pot starts at ${fmt$(s.qf_base)} and grows with every entry, and the top third of the field get paid. There are bonuses for most greens hit, the long drive and holes in one, for managers' golfers only. They don't tire golfers or count toward their career.</p></section>
+
+<section class="sec gsec"><h2>Retirement and coaching</h2>
+<p>A retired golfer becomes a <b>coach</b> rated in four areas: short game, irons, long game and the head. Coaching talent is partly luck, but the better he played, the higher his floor: a former ${TOURS.p1.name} winner is never a bad coach.</p>
+<div class="gfacts">
+ <div><b>×${s.coach_max}</b><span>The most a great coach multiplies a range session by, in his best area.</span></div>
+ <div><b>${s.lessons_per_day} a day</b><span>Lessons each coach gives, shared across every manager. Good coaches book up.</span></div>
+ <div><b>Free</b><span>Lessons from your own retired golfers, for your own roster.</span></div>
+ <div><b>You set it</b><span>The fee other managers pay to book your coaches. Rival stables book his spare lessons each night, and the fees come to you.</span></div>
+</div>
+<p>Pick a coach for any golfer on his Roster page. Booking is per session: if the coach is full that day, your golfer trains alone.</p></section>
+
+<section class="sec gsec"><h2>Money and the market</h2>
+<p>New rosters start with ${fmt$(s.start_cash)} and up to ${s.max_golfers} active golfers. Money comes from prize money, season bonuses, coaching fees and sales. It goes on entry fees, lessons and equipment (${EQC.map(fmt$).join(', ')} for each upgrade).</p>
+<p>Juniors are free to sign. College juniors and seniors and anyone older can be sold: list a golfer at your price for other managers and rival coaches, or take a quick sale at about 60% of his market value. Golfers you sell keep playing, so you'll meet them in the field.</p></section>`;}
 
 /* ---------- render and events ---------- */
 function keepScroll(fn){const bs=document.getElementById('bscroll'),top=bs?bs.scrollTop:0,y=window.scrollY;fn();const b2=document.getElementById('bscroll');if(b2&&top)b2.scrollTop=top;if(Math.abs(window.scrollY-y)>2)window.scrollTo(0,y);}

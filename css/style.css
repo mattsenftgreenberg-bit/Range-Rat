@@ -253,3 +253,20 @@ input[type=number]{font:inherit;color:var(--ink);background:var(--surface);borde
 .teebox h2{margin:0;color:inherit}
 .teebox .muted,.teebox .eyebrow{color:inherit;opacity:.75}
 .teeclock{font-family:var(--display);font-size:clamp(3.2rem,18vw,5.5rem);line-height:1;font-variant-numeric:tabular-nums;margin:6px 0;color:#e3b420}
+/* ---- online: ages and the guide ---- */
+small.age{display:inline-block;margin-left:6px;font-size:.72em;font-weight:500;opacity:.7;letter-spacing:.02em;text-transform:none;white-space:nowrap}
+.linkbtn{background:none;border:0;padding:0;font:inherit;color:inherit;text-decoration:underline;cursor:pointer}
+.gsec p{max-width:68ch;line-height:1.55}
+.gfacts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:10px;margin-block:6px}
+.gfacts>div{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.gfacts b{font-family:var(--display);font-size:1.5rem;line-height:1}
+.gfacts span{font-size:.86rem;color:var(--muted);line-height:1.35}
+.gline{display:flex;flex-direction:column;gap:0;margin-block:8px;border-left:4px solid var(--line);padding-left:14px}
+.gstage{position:relative;padding:4px 0 14px}
+.gstage::before{content:"";position:absolute;left:-23px;top:9px;width:14px;height:14px;border-radius:50%;background:var(--c,#888);border:2px solid var(--bg)}
+.gstage.col{--c:#3a7bd5}.gstage.pro{--c:#2f8f5b}.gstage.sen{--c:#c9a227}.gstage.ret{--c:#8a6d5a}
+.ghead{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+.ghead b{font-family:var(--display);text-transform:uppercase;letter-spacing:.05em;font-size:1.25rem;color:var(--c)}
+.ghead span{font-size:.9rem;color:var(--muted)}
+.ghead .gage{font-weight:700;color:inherit}
+.gbody p{margin:.4em 0}
