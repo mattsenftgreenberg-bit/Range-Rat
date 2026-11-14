@@ -210,7 +210,7 @@ board(){const b=ui.board,e=evNow();
   const ph=phase(e);
   const head=`<section class="intro"><p class="eyebrow">${T(e.tour).name}${e.test?' · test event':''}</p><h1>${esc(e.name)}</h1><p class="lede">${COURSES[e.ci].name}: ${COURSES[e.ci].blurb} Starts ${when(e.starts_at)}. ${isQ(e)?`Two rounds, no cut. ${e.status==='open'?`Pot so far ${fmt$(qfBase(e.tour.slice(3))+S().qf_add*((ui.preview&&ui.preview.eid===e.id)?ui.preview.rows.length:0))}`:`Pot ${fmt$(e.purse)}`}.`:`Purse ${fmt$(e.purse)}.`}</p>${back}</section>`;
   if(ph==='open'){const gs=mine().filter(g=>canPlay(e,g));
-    return head+`<section class="sec"><h2>Entries close in ${until(new Date(deadline(e)).toISOString())}</h2>${gs.length?`<div class="shop">${gs.map(g=>evItem(e,g,true)).join('')}</div>`:'<p class="muted">None of your golfers play on this tour.</p>'}${flash()}</section>${previewHTML(e)}`;}
+    return head+`<section class="sec"><h2>Entries close in ${until(new Date(deadline(e)).toISOString())}</h2>${gs.length?`<div class="shop">${gs.map(g=>evItem(e,g,true)).join('')}</div>`:'<p class="muted">None of your golfers play on this tour.</p>'}${flash()}</section><div class="fieldpay">${previewHTML(e)}${payoutHTML(e)}</div>`;}
   if(ph==='closed')return head+teeHTML(e,b);
   if(!b||!b.players)return head+'<section class="sec"><p class="muted">Loading the board…</p></section>';
   if(!b.players.length)return head+`<section class="sec"><p class="muted">Setting the field. The first tee time is ${until(e.starts_at)} away.</p></section>`;
@@ -318,6 +318,16 @@ function podiumHTML(b,e){const rows=boardRows(b,e).filter(r=>r.p.pos_n).sort((a,
  ${allMine.length?`<h3>Your golfers</h3><div class="shop">${allMine.sort((a,c)=>(a.p.pos_n||999)-(c.p.pos_n||999)).map(line).join('')}</div>`:''}
  ${allOth.length?`<h3>Other managers</h3><div class="shop">${allOth.sort((a,c)=>(a.p.pos_n||999)-(c.p.pos_n||999)).map(line).join('')}</div>`:''}
 </section>`;}
+// What each finishing place pays, so you know what you're playing for before you enter.
+function payoutHTML(e){const q=isQ(e),n=ui.preview&&ui.preview.eid===e.id?ui.preview.rows.length:0;
+  const purse=q?qfBase(e.tour.slice(3))+S().qf_add*n:e.purse,paid=q?Math.floor(FIELD/3):PAYF.length;
+  const base=PAYF.slice(0,paid),tot=q?base.reduce((a,b)=>a+b,0):1,pay=i=>Math.round(purse*base[i]/tot),pts=i=>Math.round((PTS[i]||3)*e.pm*10)/10;
+  const groups=ui.payAll?Array.from({length:paid},(x,i)=>[i,i]):[[0,0],[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],[7,7],[8,8],[9,9],[10,14],[15,19],[20,29],[30,39]].concat(q?[]:[[40,49],[50,59]]).filter(([a])=>a<paid);
+  const ord=i=>{const n=i+1,s=['th','st','nd','rd'][n%10>3||[11,12,13].includes(n%100)?0:n%10];return n+s;};
+  const row=([a,b])=>`<tr><td>${a===b?ord(a):`${ord(a)}\u2013${ord(b)}`}</td><td class="num">${a===b?fmt$(pay(a)):`${fmt$(pay(b))}\u2013${fmt$(pay(a))}`}</td>${q?'':`<td class="num">${a===b?fmtPts(pts(a)):`${fmtPts(pts(b))}\u2013${fmtPts(pts(a))}`}</td>`}</tr>`;
+  return `<section class="sec paysec"><h2>Prize money</h2><p class="muted small">${q?`Pot so far ${fmt$(purse)}; it grows ${fmt$(S().qf_add)} with every entry. The top ${paid} get paid.`:`Purse ${fmt$(purse)}. The top ${CUT} and ties make the cut and get paid.`}</p>
+ <div class="scroll"><table class="tbl"><thead><tr><th>Finish</th><th class="num">Prize</th>${q?'':'<th class="num">Points</th>'}</tr></thead><tbody>${groups.map(row).join('')}</tbody></table></div>
+ <p class="muted small">${q?`Plus ${fmt$(S().qf_bonus)} each for most greens, most up and downs and the long drive, and ${fmt$(S().qf_ace)} for a hole in one (managers' golfers only).`:`Tied golfers share the money for the places they cover. Missing the cut pays nothing.${e.fee?` Entry costs ${fmt$(e.fee)}.`:''}`} <button class="linkbtn" data-act="payAll">${ui.payAll?'Show fewer places':'Show every place'}</button></p></section>`;}
 async function loadPreview(e){
   if(isQ(e)){const en=await SB.from('entries').select('golfer_id').eq('event_id',e.id).eq('status','in');const ids=(en.data||[]).map(x=>x.golfer_id);const gs=ids.length?await SB.from('golfers').select('id,name,country,college,stable,manager_id,sk,yr,tour').in('id',ids):{data:[]};const rows=(gs.data||[]).map(g=>({g,how:'Entered'}));rows.sort((a,b)=>ovr(b.g.sk)-ovr(a.g.sk));ui.preview={eid:e.id,rows};return;}
   const [gs,en]=await Promise.all([SB.from('golfers').select('id,name,country,college,stable,manager_id,sk,yr,enter_rule').eq('tour',e.tour).eq('retired',false).not('manager_id','is',null),SB.from('entries').select('golfer_id,status').eq('event_id',e.id)]);
@@ -551,6 +561,7 @@ document.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');i
   if(a==='pcolor'){ui.pros.color=+v;return render();}
   if(a==='tour'){ui.tour=v;return render();}
   if(a==='stour'){ui.tour=v;ui.stand=null;return render();}
+  if(a==='payAll'){ui.payAll=!ui.payAll;return render();}
   if(a==='fullBoard'){ui.full=!ui.full;return render();}
   if(a==='board'){ui.view='board';ui.ev=v;ui.board=null;ui.watch=null;ui.full=false;ui.preview=null;render();const e=D.events.find(x=>x.id===v);if(e&&phase(e)==='open')loadPreview(e).then(render);loadBoard().then(render);return;}
   if(a==='watch'){ui.watch=v;ui.anim=null;loadWatch().then(()=>{syncAnim();render();window.scrollTo(0,0);});return;}

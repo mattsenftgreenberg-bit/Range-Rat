@@ -311,3 +311,6 @@ small.age{display:inline-block;margin-left:6px;font-size:.72em;font-weight:500;o
 .gskills dl{margin:0;display:grid;gap:2px 0}
 .gskills dt{font-weight:700;margin-top:6px}
 .gskills dd{margin:0;color:var(--muted);line-height:1.4}
+/* ---- online: the field and the prize money side by side ---- */
+.fieldpay{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:18px 24px;align-items:start}
+.fieldpay>.sec{min-width:0}
