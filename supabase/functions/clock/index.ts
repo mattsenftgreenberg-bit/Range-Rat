@@ -435,7 +435,7 @@ async function backfillStats(done: string[]) {
 }
 
 // ---------- every hour: new faces on the transfer market, and a full staff of coaches ----------
-const MARKET_KINDS: [string, number, number][] = [['col0', 6, 61], ['col0', 7, 64], ['p3', 9, 66], ['p3', 12, 68], ['p2', 10, 71], ['p2', 14, 72], ['p1', 11, 76], ['p1', 16, 77], ['c2', 25, 66], ['c1', 26, 72]];
+const MARKET_KINDS: [string, number, number][] = [['col0', 4, 56], ['col0', 5, 58], ['col0', 6, 61], ['col0', 7, 64], ['p3', 9, 66], ['p3', 12, 68], ['p2', 10, 71], ['p2', 14, 72], ['p1', 11, 76], ['p1', 16, 77], ['c2', 25, 66], ['c1', 26, 72]];
 async function hourly(s: any, done: string[]) {
   const { data: w } = await sb.from('world').select('*').maybeSingle();
   if (!w || w.meta?.setting_up || Date.now() - Date.parse(w.meta?.hourly_at || 0) < 3600e3) return;

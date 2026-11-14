@@ -178,14 +178,14 @@ const A: Record<string, (c: any) => Promise<any>> = {
   // ---- the transfer market ----
   async list({ uid, b }) {
     const g = await myGolfer(uid, b.id);
-    if (!canSell(g)) no('College freshmen and sophomores can’t be sold.');
+    if (!canSell(g)) no('Junior Tour golfers can’t be sold until they reach college.');
     const ask = Math.round(+b.ask); if (!(ask >= 1000 && ask <= 1e9)) no('Set a price of at least $1,000.');
     await sb.from('golfers').update({ ask, listed_at: new Date().toISOString() }).eq('id', g.id);
   },
   async unlist({ uid, b }) { const g = await myGolfer(uid, b.id); await sb.from('golfers').update({ ask: null, listed_at: null }).eq('id', g.id); },
   async quicksell({ uid, b }) {
     const g = await myGolfer(uid, b.id);
-    if (!canSell(g)) no('College freshmen and sophomores can’t be sold.');
+    if (!canSell(g)) no('Junior Tour golfers can’t be sold until they reach college.');
     const price = Math.round(valueOf(g.sk, g.yr) * 0.6 / 100) * 100, rival = E.pick(['Halcyon Sports', 'Old Orchard Golf', 'Bayshore Stable', 'Ironwood Academy']);
     const { data: claimed } = await sb.from('golfers').update({ manager_id: null, stable: rival, ask: null, listed_at: null, coach_id: null, orders: null }).eq('id', g.id).eq('manager_id', uid).select('id');
     if (!claimed?.length) no('Try that again.');

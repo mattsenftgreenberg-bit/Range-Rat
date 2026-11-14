@@ -73,7 +73,7 @@ export function valueOf(sk: any, yr: number) {
   const o = E.ovr(sk), a = yr <= 3 ? [0.1, 0.14, 0.18][yr - 1] : yr <= 7 ? [0.2, 0.3, 0.45, 0.7][yr - 4] : yr <= 15 ? 1.15 - (yr - 8) * 0.02 : yr <= 23 ? 1 - (yr - 15) * 0.07 : Math.max(0.04, 0.3 - (yr - 24) * 0.03);
   return Math.max(1000, Math.round(50000 * Math.pow(5, (o - 64) / 6) * a / 500) * 500);
 }
-export const canSell = (g: any) => g.yr >= 6; // college juniors and up
+export const canSell = (g: any) => g.yr >= 4; // college freshmen and up
 // chance a rival coach meets the asking price on a given day
 export const saleChanceDay = (ask: number, val: number, mult = 1) => {
   const wk = ask <= val * 0.9 ? 0.9 : E.clamp(1.5 - ask / val, 0, 0.9);
