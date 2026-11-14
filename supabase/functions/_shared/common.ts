@@ -23,7 +23,7 @@ export const DEFAULTS: Record<string, any> = {
   gain_mult: 1, rust_per_day: 0.025, recovery_per_day: 15, event_fatigue: 20, train_fatigue: 15,
   purse_mult: 1, fee_mult: 1, sale_chance_mult: 1, coach_age_yr: 18, recruit_cost: 5000,
   weekends: true,
-  market_size: 14, market_new: 4, ai_coaches: 30,
+  market_size: 14, market_new: 4, ai_coaches: 30, market_prodigy_pct: 1,
   qf_on: true, qf_every_min: 20, qf_fee: 200, qf_base: 20000, qf_add: 200, qf_bonus: 1000, qf_ace: 1000000,
 };
 export async function settings() {
@@ -164,8 +164,11 @@ export async function insertGolfers(rows: any[], secrets: any[]) {
 export const COLLEGE_TOUR = (_college?: string) => 'col0';
 
 // A rival-coach transfer listing: a ready-made golfer on a given tour.
-export function marketProspect(tour: string, yr: number, mu: number) {
-  const p = E.rollProspect(mu), c = Math.random() < 0.34 ? 'US' : E.pick(E.CN), N = E.NAMES[c];
+// `prodigyPct` caps how often a Prodigy turns up (they'd otherwise be 5% of rolls).
+export function marketProspect(tour: string, yr: number, mu: number, prodigyPct = 5) {
+  let p = E.rollProspect(mu);
+  while (p.arch === 'Prodigy' && Math.random() * 5 >= prodigyPct) p = E.rollProspect(mu);
+  const c = Math.random() < 0.34 ? 'US' : E.pick(E.CN), N = E.NAMES[c];
   const name = E.pick(N[0]) + ' ' + E.pick(N[1]);
   const college = E.isCol(tour) ? E.pick(E.COLLEGES) : null;
   return { p, name, country: c, tour, yr, college };

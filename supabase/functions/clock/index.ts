@@ -448,7 +448,7 @@ async function hourly(s: any, done: string[]) {
   if (want) {
     const rows: any[] = [], sx: any[] = [];
     for (let i = 0; i < want; i++) {
-      const [tour, yr, mu] = E.pick(MARKET_KINDS), m = marketProspect(tour, yr, mu + Math.round(E.gauss() * 2));
+      const [tour, yr, mu] = E.pick(MARKET_KINDS), m = marketProspect(tour, yr, mu + Math.round(E.gauss() * 2), s.market_prodigy_pct);
       const ask = Math.round(valueOf(m.p.sk, yr) * (0.85 + Math.random() * 0.45) / 500) * 500;
       rows.push(golferRow({ ...m, arch: m.p.arch, sk: m.p.sk }, { stable: E.pick(RIVALS), career: true, ask, listed_at: new Date().toISOString(), color: Math.floor(Math.random() * 6) }));
       sx.push({ ce: m.p.ce, peak: m.p.peak, agg: m.p.agg });
