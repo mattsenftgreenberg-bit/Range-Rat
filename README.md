@@ -21,4 +21,4 @@ Players can read the tables but never write to them. Scores are revealed by `eve
 
 ## Hosting
 
-Netlify publishes the repository root as is (`netlify.toml`).
+GitHub Pages publishes the `main` branch as is: https://mattsenftgreenberg-bit.github.io/Range-Rat/ (`.nojekyll` keeps every file untouched). The old Netlify site (`netlify.toml`) is no longer updated.

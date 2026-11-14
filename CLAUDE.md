@@ -2,6 +2,7 @@
 
 - Owner: Matthew. He describes gameplay changes in plain words and tests in the browser; keep replies short and non-technical.
 - The plan for the online version lives in the "Range Rat online plan" doc. This repository is Level 2 of it: the shared world at `/`, with the Level 1 single-player game kept at `/solo`.
+- Hosted on GitHub Pages from `main` (https://mattsenftgreenberg-bit.github.io/Range-Rat/); pushing to `main` publishes within a minute or two. Netlify is out of credits and no longer used. Keep every page path relative: the site lives in a subfolder.
 - Static site, no build step. Edit the files directly. `js/core.js` = engine (no DOM). `js/online.js` = shared-world UI. `js/game.js` = solo UI and saving.
 - Edit the online game in `src/online.src.js`, then run `tools/build-online.sh` to produce `js/online.js` (it prepends the helper lines from the top of `js/game.js`). Never edit `js/online.js` by hand.
 - Career years (online): 1-3 Junior Tour (ages 15-17), 4-7 the one Collegiate Tour `col0` (18-21), 8-23 pro, 24-33 senior, then retirement. One season is one week (Mon-Sat events, Sunday Finale). `jr` and the Collegiate Tour name are added to the engine's TOURS at runtime, in `_shared/common.ts` and `src/online.src.js`, so the solo game is unaffected.
