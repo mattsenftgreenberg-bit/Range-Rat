@@ -537,7 +537,7 @@ document.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');i
   if(a==='stour'){ui.tour=v;ui.stand=null;return render();}
   if(a==='payAll'){ui.payAll=!ui.payAll;return render();}
   if(a==='fullBoard'){ui.full=!ui.full;return render();}
-  if(a==='board'){ui.view='board';ui.ev=v;ui.board=null;ui.watch=null;ui.full=false;ui.preview=null;render();const e=D.events.find(x=>x.id===v);if(e&&phase(e)==='open')loadPreview(e).then(render);loadBoard().then(render);return;}
+  if(a==='board'){ui.view='board';ui.ev=v;ui.board=null;ui.watch=null;ui.full=false;ui.preview=null;render();window.scrollTo(0,0);const e=D.events.find(x=>x.id===v);if(e&&phase(e)==='open')loadPreview(e).then(render);loadBoard().then(render);return;}
   if(a==='watch'){ui.watch=v;ui.anim=null;loadWatch().then(()=>{syncAnim();render();window.scrollTo(0,0);});return;}
   if(a==='wStop'){ui.watch=null;ui.anim=null;return render();}
   if(a==='wPause'&&ui.anim){ui.anim.paused=!ui.anim.paused;return paintSide();}
