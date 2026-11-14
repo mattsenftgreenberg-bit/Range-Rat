@@ -138,6 +138,8 @@ async function topUpSeason(s: any, done: string[]) {
 // One Quick-Fire Open per level, all teeing off together: college (all three conferences), then each pro and senior tour.
 // Their tour is written 'qf:<level>', e.g. 'qf:col' or 'qf:p1'.
 const QT = ['jr', 'col', 'p3', 'p2', 'p1', 'c2', 'c1'];
+// Each level's base pot follows the main tours: the college pot is `qf_base`, the others scale by their tour purse.
+const qfBase = (s: any, lv: string) => Math.round(s.qf_base * E.TOURS[lv === 'col' ? 'col0' : lv].purse / E.TOURS.col0.purse / 1000) * 1000;
 const isQ = (tour: string) => String(tour).startsWith('qf');
 const qLevel = (tour: string) => String(tour).split(':')[1] || '';
 async function scheduleQuick(s: any, done: string[]) {
@@ -149,7 +151,7 @@ async function scheduleQuick(s: any, done: string[]) {
   const { data: w } = await sb.from('world').select('season').maybeSingle();
   const rows = want.flatMap((at) => QT.map((lv) => ({ lv, at }))).filter(({ lv, at }) => !got.has('qf:' + lv + '|' + at)).map(({ lv, at }) => ({
     tour: 'qf:' + lv, season: w?.season || 1, week: 0, name: 'Quick-Fire Open', ci: Math.floor(Math.random() * E.COURSES.length), type: 'Quick-Fire',
-    purse: s.qf_base, fee: s.qf_fee, pm: 0, starts_at: at, round_min: s.round_min, rounds: 2,
+    purse: qfBase(s, lv), fee: s.qf_fee, pm: 0, starts_at: at, round_min: s.round_min, rounds: 2,
   }));
   if (rows.length) { await sb.from('events').upsert(rows, { onConflict: 'tour,starts_at', ignoreDuplicates: true }); done.push(`scheduled ${rows.length} Quick-Fire`); }
 }
@@ -171,7 +173,7 @@ async function lockQuick(ev: any, s: any, done: string[]) {
   const probs = E.winProbs(fl.map((f) => ({ r: rs.get(f.id) ?? 60, cur: 0, H: 36 })), 4000);
   const { error } = await sb.from('event_players').insert(fl.map((f, i) => ({ event_id: ev.id, golfer_id: f.id, managed: f.managed, slot0: Math.floor(Math.random() * 3), odds0: probs[i] })));
   if (error) throw new Error('quick field: ' + error.message);
-  const purse = s.qf_base + s.qf_add * ids.length;
+  const purse = qfBase(s, qLevel(ev.tour)) + s.qf_add * ids.length;
   await sb.from('events').update({ field: fl.length, purse }).eq('id', ev.id);
   done.push(`locked Quick-Fire: ${ids.length} entered, pot ${purse}`);
 }
