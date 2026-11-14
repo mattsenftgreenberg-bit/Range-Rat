@@ -277,3 +277,31 @@ small.age{display:inline-block;margin-left:6px;font-size:.72em;font-weight:500;o
 .item .linkbtn{font:inherit;text-transform:inherit;letter-spacing:inherit;text-align:left}
 .gstage.jr{--c:#8a5cc7}.gstage.rec{--c:#d0703a}
 .offers{border:2px solid var(--mid);border-radius:8px;padding-inline:14px}
+/* ---- online: the locker room (roster cards) ---- */
+.roster{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:12px;margin-block:4px 18px}
+.rcard{display:flex;flex-direction:column;gap:10px;text-align:left;font:inherit;color:inherit;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer;min-width:0}
+.rcard:hover,.rcard:focus-visible{border-color:var(--ink,currentColor)}
+.rtop{display:flex;align-items:center;gap:10px;min-width:0}
+.rtop .avatar{flex:none}
+.rwho{display:flex;flex-direction:column;min-width:0;flex:1}
+.rwho b{font-family:var(--display);text-transform:uppercase;letter-spacing:.03em;font-size:1.1rem;overflow-wrap:anywhere}
+.rwho span{font-size:.82rem;color:var(--muted)}
+.rovr{display:flex;flex-direction:column;align-items:center;flex:none}
+.rovr b{font-family:var(--display);font-size:1.8rem;line-height:1}
+.rovr span{font-size:.7rem;color:var(--muted);letter-spacing:.08em}
+.rbars,.cbars{display:grid;grid-template-columns:auto 1fr 2.2em;gap:5px 10px;align-items:center}
+.rbars .rl,.cbars>span:nth-child(3n+1){font-size:.8rem;color:var(--muted);white-space:nowrap}
+.rbars .track,.cbars .track{height:8px}
+.rbars b,.cbars b{text-align:right;font-variant-numeric:tabular-nums}
+.rcard .tag{align-self:flex-start}
+/* ---- online: the coach board on the range ---- */
+.cpick summary{cursor:pointer;font-weight:700;padding:6px 0}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:10px;margin-top:8px}
+.ccard{display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-width:0}
+.ccard.on{border:2px solid var(--good)}
+.ccard.full{opacity:.55}
+.ccard p{margin:0}
+.chead{display:flex;flex-direction:column;min-width:0}
+.chead b{overflow-wrap:anywhere}
+.cfoot{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;justify-content:space-between}
+.cfoot>span:first-child{font-weight:700}

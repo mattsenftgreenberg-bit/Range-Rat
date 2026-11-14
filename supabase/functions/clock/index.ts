@@ -27,6 +27,7 @@ Deno.serve(async (req) => {
     await ensureWorld(s, done);
     await scheduleQuick(s, done);
     await topUpSeason(s, done);
+    await hourly(s, done);
     await lockDue(s, done);
     await simNext(s, done); // one round per call keeps each call well inside its time limit
     await finalizeDue(s, done);
@@ -178,17 +179,23 @@ async function lockQuick(ev: any, s: any, done: string[]) {
   done.push(`locked Quick-Fire: ${ids.length} entered, pot ${purse}`);
 }
 // Greens in regulation, the longest drive and aces, read from one hole's shots.
-function holeExtras(res: any, par: number) {
-  let n = 0, reached = 99, drive = 0;
-  for (let i = 0; i < res.shots.length; i++) {
-    const x = res.shots[i]; if (x.k === 'pick') continue;
-    if (x.k === 'putt') { reached = n; break; }
-    n++;
-    if (x.holed) { reached = n; break; }
+// One hole's numbers: green in regulation, fairway hit, putts, up and down, the drive and aces.
+// Up and down: from 40 yards or closer (off the green), on the green or in the hole with that shot, then at most one putt.
+function holeExtras(res: any, h: any) {
+  const par = h.par, S = res.shots.filter((x: any) => x.k !== 'pick');
+  let n = 0, reached = 99;
+  for (const x of S) { if (x.k === 'putt') { reached = n; break; } n++; if (x.holed) { reached = n; break; } }
+  const t0 = S[0], wet = S[1] && S[1].k === 'drop';
+  const drive = par >= 4 && t0 && t0.k === 'full' && !wet ? Math.round(E.dist(t0.from, t0.to)) : 0;
+  const fwc = par >= 4 ? 1 : 0, fw = fwc && t0 && !wet && E.lieAt(h, t0.to) === 'fairway' ? 1 : 0;
+  const putts = S.filter((x: any) => x.k === 'putt').length;
+  let ud = 0, udc = 0;
+  const i = S.findIndex((x: any) => x.k !== 'putt' && x.k !== 'drop' && (x.holed || E.lieAt(h, x.to) === 'green'));
+  if (i >= 0) {
+    const x = S[i];
+    if (E.lieAt(h, x.from) !== 'green' && E.dist(x.from, h.pin) <= 40) { udc = 1; ud = x.holed || (S[i + 1] && S[i + 1].k === 'putt' && S[i + 1].holed) ? 1 : 0; }
   }
-  const t0 = res.shots[0];
-  if (par >= 4 && t0 && t0.k === 'full' && !(res.shots[1] && res.shots[1].k === 'drop')) drive = Math.round(Math.hypot(t0.to[0] - t0.from[0], t0.to[1] - t0.from[1]));
-  return { gir: reached <= par - 2 ? 1 : 0, drive, ace: res.score === 1 ? 1 : 0 };
+  return { gir: reached <= par - 2 ? 1 : 0, drive, ace: res.score === 1 ? 1 : 0, fw, fwc, putts, ud, udc };
 }
 
 // ---------- events ----------
@@ -269,13 +276,14 @@ async function simRound(ev: any) {
   if (r === 0) eng.players.forEach((p: any) => (p.weekForm = E.gauss() * (6 - p.g.sk.mental * 0.035) * 0.9));
   E.beginRound(eng);
   const act = eng.players.filter((p: any) => !p.cut), card = new Map<any, number[]>(act.map((p: any) => [p, [] as number[]])), shots: any[] = [];
-  const quick = isQ(ev.tour), ext = new Map<any, any>(eng.players.map((p: any) => [p, { gir: 0, drive: 0, aces: 0, ...(p.ep.extra || {}) }]));
+  const quick = isQ(ev.tour), ext = new Map<any, any>(eng.players.map((p: any) => [p, { gir: 0, drive: 0, aces: 0, fw: 0, fwc: 0, putts: 0, ud: 0, udc: 0, holes: 0, ...(p.ep.extra || {}) }]));
   for (let h = 0; h < E.HOLES; h++) {
     eng.hole = h;
     const out = E.simHole(eng);
     for (const [p, res] of out as Map<any, any>) {
       card.get(p)!.push(res.score);
-      if (quick) { const x = holeExtras(res, eng.course.holes[h].par), o = ext.get(p); o.gir += x.gir; o.aces += x.ace; o.drive = Math.max(o.drive, x.drive); const rr = (o.r ??= []); (rr[r] ??= { g: [], d: [] }); rr[r].g.push(x.gir); rr[r].d.push(x.drive); }
+      { const x = holeExtras(res, eng.course.holes[h]), o = ext.get(p); o.holes++; o.gir += x.gir; o.aces += x.ace; o.drive = Math.max(o.drive, x.drive); o.fw += x.fw; o.fwc += x.fwc; o.putts += x.putts; o.ud += x.ud; o.udc += x.udc;
+        if (quick) { const rr = (o.r ??= []); (rr[r] ??= { g: [], d: [], u: [] }); rr[r].g.push(x.gir); rr[r].d.push(x.drive); (rr[r].u ??= []).push(x.ud); } }
       if (p.managed) shots.push({
         event_id: ev.id, golfer_id: p.g.id, round: r, hole: h, mood: r1(p.st.mood), run: p.st.run,
         shots: res.shots.map((x: any) => ({ k: x.k, from: x.from.map(r1), to: x.to.map(r1), text: x.text, holed: !!x.holed })),
@@ -288,7 +296,7 @@ async function simRound(ev: any) {
     event_id: ev.id, golfer_id: p.g.id, managed: p.managed, slot0: p.slot0, slot: p.slot ?? null, week_form: p.weekForm,
     mood: p.st ? p.st.mood : p.ep.mood, ev_par: p.evPar, cut: p.cut,
     scores: card.has(p) ? (p.ep.scores || []).concat([card.get(p)]) : p.ep.scores,
-    ...(quick ? { extra: ext.get(p) } : {}),
+    extra: ext.get(p),
   }));
   const { error } = await sb.from('event_players').upsert(rows);
   if (error) throw new Error('round save: ' + error.message);
@@ -331,6 +339,7 @@ async function finalize(ev: any, s: any, done: string[]) {
     if (ev.test) { say(line); continue; }
     const S = { ev: 0, cuts: 0, wins: 0, top10: 0, earn: 0, rounds: 0, par: 0, low: null as number | null, ...(g.stats || {}) };
     S.ev++; if (!p.cut) S.cuts++; S.earn += p.pay;
+    const X = p.ep.extra || {}; for (const k of ['holes', 'gir', 'fw', 'fwc', 'putts', 'ud', 'udc']) S[k] = (S[k] || 0) + (X[k] || 0);
     (p.ep.scores || []).forEach((sc: number[]) => { if (sc.length === 18) { const tp = sumA(sc) - sumA(pars); S.rounds++; S.par += tp; if (S.low === null || tp < S.low) S.low = tp; } });
     const trophies = g.trophies || [], ce = g.ce;
     if (p.won) { S.wins++; S.top10++; trophies.push({ s: ev.season, n: ev.name, t: ev.tour }); addSkill(g, ce, 'clutch', 0.8); addSkill(g, ce, 'mental', 0.5); addSkill(g, ce, 'momentum', 0.5); g.conf = 2.5; }
@@ -366,14 +375,15 @@ async function finalizeQuick(ev: any, s: any, done: string[]) {
   // only managers' golfers can win bonuses
   const real = eng.players.filter((p: any) => p.managed);
   const top = (k: string) => { const m = Math.max(0, ...real.map((p: any) => p.x[k] || 0)); return m > 0 ? real.filter((p: any) => (p.x[k] || 0) === m) : []; };
-  const gw = top('gir'), dw = top('drive'), bonus = new Map<any, string[]>();
+  const gw = top('gir'), dw = top('drive'), uw = top('ud'), bonus = new Map<any, string[]>();
   for (const p of eng.players) { p.pay = Math.round((p.payf || 0) * ev.purse); p.bon = 0; }
   const give = (p: any, amt: number, why: string) => { p.bon += amt; (bonus.get(p) || bonus.set(p, []).get(p))!.push(why); };
   gw.forEach((p: any) => give(p, Math.round(s.qf_bonus / gw.length), `most greens hit (${p.x.gir})`));
   dw.forEach((p: any) => give(p, Math.round(s.qf_bonus / dw.length), `long drive (${p.x.drive} yards)`));
+  uw.forEach((p: any) => give(p, Math.round(s.qf_bonus / uw.length), `most up and downs (${p.x.ud})`));
   real.forEach((p: any) => { if (p.x.aces) give(p, s.qf_ace * p.x.aces, p.x.aces > 1 ? `${p.x.aces} holes in one` : 'a hole in one'); });
   await sb.from('event_players').upsert(eng.players.map((p: any) => ({ event_id: ev.id, golfer_id: p.g.id, pos: p.pos, pos_n: p.posN, pts: 0, pay: p.pay + p.bon, won: !!p.won, extra: { ...p.x, prize: p.pay, bonus: p.bon, why: bonus.get(p) || [] } })));
-  await sb.from('events').update({ meta: { ...ev.meta, bonus: { gir: gw.map((p: any) => p.g.id), drive: dw.map((p: any) => p.g.id), aces: real.filter((p: any) => p.x.aces).map((p: any) => p.g.id) } } }).eq('id', ev.id);
+  await sb.from('events').update({ meta: { ...ev.meta, bonus: { gir: gw.map((p: any) => p.g.id), drive: dw.map((p: any) => p.g.id), ud: uw.map((p: any) => p.g.id), aces: real.filter((p: any) => p.x.aces).map((p: any) => p.g.id) } } }).eq('id', ev.id);
   const news: Record<string, string[]> = {};
   for (const p of eng.players) {
     const g = p.g; if (!g.manager_id) continue;
@@ -395,6 +405,34 @@ async function fillCoachRatings(done: string[]) {
   const m = new Map((sec || []).map((x: any) => [x.golfer_id, x.co]));
   for (const c of cs) await sb.from('golfers').update({ cr: { ...c.cr, o: coachRatings(c, m.get(c.id) || rawCo(c.id)) } }).eq('id', c.id);
   done.push(`coach ratings for ${cs.length}`);
+}
+
+// ---------- every hour: new faces on the transfer market, and a full staff of coaches ----------
+const MARKET_KINDS: [string, number, number][] = [['col0', 6, 61], ['col0', 7, 64], ['p3', 9, 66], ['p3', 12, 68], ['p2', 10, 71], ['p2', 14, 72], ['p1', 11, 76], ['p1', 16, 77], ['c2', 25, 66], ['c1', 26, 72]];
+async function hourly(s: any, done: string[]) {
+  const { data: w } = await sb.from('world').select('*').maybeSingle();
+  if (!w || w.meta?.setting_up || Date.now() - Date.parse(w.meta?.hourly_at || 0) < 3600e3) return;
+  await sb.from('world').update({ meta: { ...w.meta, hourly_at: new Date().toISOString() } }).eq('id', 1);
+  // the oldest few computer listings come off the market (those golfers quietly leave the game)
+  const { data: rl } = await sb.from('golfers').select('id,listed_at').is('manager_id', null).not('ask', 'is', null).eq('retired', false).order('listed_at');
+  const have = rl || [], drop = have.slice(0, Math.max(s.market_new, have.length - s.market_size + s.market_new));
+  if (drop.length) await sb.from('golfers').update({ ask: null, listed_at: null, retired: true }).in('id', drop.map((g: any) => g.id));
+  const want = Math.max(0, s.market_size - (have.length - drop.length));
+  if (want) {
+    const rows: any[] = [], sx: any[] = [];
+    for (let i = 0; i < want; i++) {
+      const [tour, yr, mu] = E.pick(MARKET_KINDS), m = marketProspect(tour, yr, mu + Math.round(E.gauss() * 2));
+      const ask = Math.round(valueOf(m.p.sk, yr) * (0.85 + Math.random() * 0.45) / 500) * 500;
+      rows.push(golferRow({ ...m, arch: m.p.arch, sk: m.p.sk }, { stable: E.pick(RIVALS), career: true, ask, listed_at: new Date().toISOString(), color: Math.floor(Math.random() * 6) }));
+      sx.push({ ce: m.p.ce, peak: m.p.peak, agg: m.p.agg });
+    }
+    await insertGolfers(rows, sx);
+  }
+  // computer coaches: keep the staff at full strength
+  const { count: nc } = await sb.from('golfers').select('id', { count: 'exact', head: true }).eq('retired', true).not('cr', 'is', null).is('manager_id', null);
+  const add = Math.max(0, s.ai_coaches - (nc || 0));
+  if (add) { const cs = Array.from({ length: add }, () => aiCoachRow(Math.floor(Math.random() * 1e9), s.lessons_per_day)); await insertGolfers(cs.map((c) => c.row), cs.map((c) => c.sec)); }
+  done.push(`market: ${drop.length} out, ${want} in${add ? `; ${add} new coaches` : ''}`);
 }
 
 // ---------- the daily refresh ----------
@@ -439,25 +477,21 @@ async function dailyRefresh(s: any, done: string[]) {
     await sb.from('golfers').update({ college: o.college, offers: null }).eq('id', g.id);
     if (g.manager_id) { await cash(g.manager_id, o.nil, 'nil', `${g.name}: NIL deal with ${o.college}`); say(g.manager_id, `${g.name} took the best offer and signed with ${o.college}: ${fmt$(o.nil)} NIL deal.`); }
   }
-  // coaches: rival managers book what's left of each coach's day
+  // coaches: only managers' golfers take lessons. Each coach starts the day with a full diary.
+  // A computer coach who was fully booked raises his fee a little; one nobody booked drifts back toward a fair price.
   const { data: cs } = await sb.from('golfers').select('id,name,manager_id,sk,best,stats,trophies,seasons,tour,cr,stable').eq('retired', true).not('cr', 'is', null);
   const cids = (cs || []).map((c: any) => c.id);
   const { data: csec } = cids.length ? await sb.from('golfer_secrets').select('golfer_id,co').in('golfer_id', cids) : { data: [] };
   const com = new Map((csec || []).map((x: any) => [x.golfer_id, x.co]));
   const L = s.lessons_per_day;
   for (const c of cs || []) {
-    const o = coachRatings(c, com.get(c.id) || rawCo(c.id)), cr = { ...c.cr, o }, fair = fairPrice(o, fameOf(c));
-    if (c.manager_id) {
-      const n = binom(Math.max(0, cr.left), pBook(cr.price / fair)), inc = n * cr.price;
-      if (inc) await cash(c.manager_id, inc, 'coaching', `${c.name}: ${n} lesson${n === 1 ? '' : 's'} for rival managers`);
-      cr.earn = (cr.earn || 0) + inc; cr.given = (cr.given || 0) + n; cr.last = n; cr.left = L;
-      say(c.manager_id, n ? `${c.name} gave ${n} lesson${n === 1 ? '' : 's'} to rival managers' golfers and earned ${fmt$(inc)}.` : `Nobody booked ${c.name} at ${fmt$(cr.price)} a lesson.`);
-    } else {
-      const n = binom(Math.max(0, cr.left), pBook(cr.price / fair) * 0.85);
-      cr.given = (cr.given || 0) + n; cr.earn = (cr.earn || 0) + n * cr.price;
-      if (cr.left - n <= 0) cr.price = Math.round(cr.price * 1.08 / 50) * 50; else if (n === 0) cr.price = Math.max(250, Math.round(cr.price * 0.95 / 50) * 50);
-      cr.left = L - binom(L, pBook(cr.price / fair) * 0.45);
+    const o = coachRatings(c, com.get(c.id) || rawCo(c.id)), cr = { ...c.cr, o }, fair = fairPrice(o, fameOf(c)), booked = Math.max(0, L - (cr.left ?? L));
+    cr.last = booked;
+    if (!c.manager_id) {
+      if (booked >= L) cr.price = Math.round(cr.price * 1.08 / 50) * 50;
+      else if (booked === 0 && cr.price > fair) cr.price = Math.max(fair, Math.round(cr.price * 0.95 / 50) * 50);
     }
+    cr.left = L;
     await sb.from('golfers').update({ cr }).eq('id', c.id);
   }
   // the transfer market: rival coaches buy listed golfers, and list a few of their own
@@ -470,21 +504,6 @@ async function dailyRefresh(s: any, done: string[]) {
       await sb.from('golfers').update({ manager_id: null, stable: rival, ask: null, listed_at: null, coach_id: null, career: true, orders: null }).eq('id', g.id);
       say(g.manager_id, `${rival} met your price: ${g.name} is sold for ${fmt$(g.ask)}. He stays on the ${E.TOURS[g.tour].name}, so you'll still see him in the field.`);
     } else if (g.ask > val * 1.45) say(g.manager_id, `No coach will go near ${fmt$(g.ask)} for ${g.name}. The market has him at ${fmt$(val)}.`);
-  }
-  const week = new Date(Date.now() - 7 * 864e5).toISOString();
-  await sb.from('golfers').update({ ask: null, listed_at: null }).is('manager_id', null).not('ask', 'is', null).lt('listed_at', week);
-  const { count } = await sb.from('golfers').select('id', { count: 'exact', head: true }).is('manager_id', null).not('ask', 'is', null).eq('retired', false);
-  const want = Math.max(0, 6 - (count || 0)), kinds = [['col', 6, 63], ['p3', 9, 67], ['p2', 11, 72], ['p1', 12, 77]];
-  if (want) {
-    const rows: any[] = [], sx: any[] = [];
-    for (let i = 0; i < want; i++) {
-      const [t, yr, mu] = kinds[Math.floor(Math.random() * kinds.length)] as [string, number, number];
-      const tour = t === 'col' ? 'col0' : t, m = marketProspect(tour, yr, mu);
-      const ask = Math.round(valueOf(m.p.sk, yr) * (0.85 + Math.random() * 0.45) / 500) * 500;
-      rows.push(golferRow({ ...m, arch: m.p.arch, sk: m.p.sk }, { stable: E.pick(RIVALS), career: true, ask, listed_at: new Date().toISOString(), color: Math.floor(Math.random() * 6) }));
-      sx.push({ ce: m.p.ce, peak: m.p.peak, agg: m.p.agg });
-    }
-    await insertGolfers(rows, sx);
   }
   for (const mid in news) await addNews(mid, news[mid]);
   done.push(`daily refresh: ${(gs || []).length} golfers, ${(cs || []).length} coaches`);
