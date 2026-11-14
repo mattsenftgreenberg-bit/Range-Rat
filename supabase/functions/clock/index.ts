@@ -28,6 +28,7 @@ Deno.serve(async (req) => {
     await scheduleQuick(s, done);
     await topUpSeason(s, done);
     await hourly(s, done);
+    await backfillStats(done);
     await lockDue(s, done);
     await simNext(s, done); // one round per call keeps each call well inside its time limit
     await finalizeDue(s, done);
@@ -405,6 +406,32 @@ async function fillCoachRatings(done: string[]) {
   const m = new Map((sec || []).map((x: any) => [x.golfer_id, x.co]));
   for (const c of cs) await sb.from('golfers').update({ cr: { ...c.cr, o: coachRatings(c, m.get(c.id) || rawCo(c.id)) } }).eq('id', c.id);
   done.push(`coach ratings for ${cs.length}`);
+}
+
+// ---------- one time: greens, fairways, putts and up and downs from the shots already on file ----------
+// Shots are kept for managers' golfers, so their past tour events can be counted. Quick-Fire and test events don't count.
+async function backfillStats(done: string[]) {
+  const { data: w } = await sb.from('world').select('*').maybeSingle();
+  if (!w || w.meta?.bf_done) return;
+  const t0 = performance.now(), tot = new Map<string, any>();
+  for (let from = 0; ; from += 1000) {
+    const { data: rows, error } = await sb.from('event_shots').select('golfer_id,hole,shots,events!inner(ci,tour,test,status)').eq('events.status', 'final').eq('events.test', false).not('events.tour', 'like', 'qf%').range(from, from + 999);
+    if (error) throw new Error('backfill: ' + error.message);
+    for (const r of rows || []) {
+      const h = E.COURSES[r.events.ci].holes[r.hole], x = holeExtras({ shots: r.shots || [], score: 0 }, h);
+      const o = tot.get(r.golfer_id) || { holes: 0, gir: 0, fw: 0, fwc: 0, putts: 0, ud: 0, udc: 0 };
+      o.holes++; for (const k of ['gir', 'fw', 'fwc', 'putts', 'ud', 'udc']) o[k] += (x as any)[k];
+      tot.set(r.golfer_id, o);
+    }
+    if (!rows || rows.length < 1000) break;
+  }
+  const ids = [...tot.keys()];
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data: gs } = await sb.from('golfers').select('id,stats').in('id', ids.slice(i, i + 100));
+    for (const g of gs || []) await sb.from('golfers').update({ stats: { ...(g.stats || {}), ...tot.get(g.id) } }).eq('id', g.id);
+  }
+  await sb.from('world').update({ meta: { ...w.meta, bf_done: new Date().toISOString() } }).eq('id', 1);
+  done.push(`stats backfilled for ${ids.length} golfers in ${Math.round(performance.now() - t0)}ms`);
 }
 
 // ---------- every hour: new faces on the transfer market, and a full staff of coaches ----------
