@@ -417,8 +417,8 @@ async function backfillStats(done: string[]) {
   for (let from = 0; ; from += 1000) {
     const { data: rows, error } = await sb.from('event_shots').select('golfer_id,hole,shots,events!inner(ci,tour,test,status)').eq('events.status', 'final').eq('events.test', false).not('events.tour', 'like', 'qf%').range(from, from + 999);
     if (error) throw new Error('backfill: ' + error.message);
-    for (const r of rows || []) {
-      const h = E.COURSES[r.events.ci].holes[r.hole], x = holeExtras({ shots: r.shots || [], score: 0 }, h);
+    for (const r of (rows || []) as any[]) {
+      const ev = Array.isArray(r.events) ? r.events[0] : r.events, h = E.COURSES[ev.ci].holes[r.hole], x = holeExtras({ shots: r.shots || [], score: 0 }, h);
       const o = tot.get(r.golfer_id) || { holes: 0, gir: 0, fw: 0, fwc: 0, putts: 0, ud: 0, udc: 0 };
       o.holes++; for (const k of ['gir', 'fw', 'fwc', 'putts', 'ud', 'udc']) o[k] += (x as any)[k];
       tot.set(r.golfer_id, o);
