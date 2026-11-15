@@ -340,7 +340,7 @@ async function finalize(ev: any, s: any, done: string[]) {
     if (ev.test) { say(line); continue; }
     const S = { ev: 0, cuts: 0, wins: 0, top10: 0, earn: 0, rounds: 0, par: 0, low: null as number | null, ...(g.stats || {}) };
     S.ev++; if (!p.cut) S.cuts++; S.earn += p.pay;
-    const X = p.ep.extra || {}; for (const k of ['holes', 'gir', 'fw', 'fwc', 'putts', 'ud', 'udc']) S[k] = (S[k] || 0) + (X[k] || 0);
+    const X = p.ep.extra || {}; for (const k of ['holes', 'gir', 'fw', 'fwc', 'putts', 'ud', 'udc', 'aces']) S[k] = (S[k] || 0) + (X[k] || 0);
     (p.ep.scores || []).forEach((sc: number[]) => { if (sc.length === 18) { const tp = sumA(sc) - sumA(pars); S.rounds++; S.par += tp; if (S.low === null || tp < S.low) S.low = tp; } });
     const trophies = g.trophies || [], ce = g.ce;
     if (p.won) { S.wins++; S.top10++; trophies.push({ s: ev.season, n: ev.name, t: ev.tour }); addSkill(g, ce, 'clutch', 0.8); addSkill(g, ce, 'mental', 0.5); addSkill(g, ce, 'momentum', 0.5); g.conf = 2.5; }
