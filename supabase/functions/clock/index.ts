@@ -234,20 +234,21 @@ function mpPairs(ent: any[], P: number) {
 function ordinal(n: number) { return n + (['th', 'st', 'nd', 'rd'][n % 10 > 3 || [11, 12, 13].includes(n % 100) ? 0 : n % 10]); }
 // One nine-hole match. Holes after the 9th are sudden death.
 function mpMatch(A: any, B: any, course: any, wind: any) {
-  const sa = E.initState(A, 1, 0, 0), sb2 = E.initState(B, 1, 0, 0), holes: number[][] = [];
+  const sa = E.initState(A, 1, 0, 0), sb2 = E.initState(B, 1, 0, 0), holes: number[][] = [], shots: any[] = [];
+  const pack = (r: any) => r.shots.map((x: any) => ({ k: x.k, from: x.from.map(r1), to: x.to.map(r1), text: x.text, holed: !!x.holed }));
   let diff = 0, h = 0;
   while (true) {
     const hole = course.holes[h % 18], tight = (h >= 6 && Math.abs(diff) <= 1) || h >= 9;
     const ra = E.playHole(A, sa, hole, { wind, pressure: tight, sit: diff < 0 ? 'chase' : diff > 0 ? 'protect' : undefined }); E.afterHole(A, sa, hole, ra);
     const rb = E.playHole(B, sb2, hole, { wind, pressure: tight, sit: diff > 0 ? 'chase' : diff < 0 ? 'protect' : undefined }); E.afterHole(B, sb2, hole, rb);
-    holes.push([ra.score, rb.score]);
+    holes.push([ra.score, rb.score]); shots.push([pack(ra), pack(rb)]);
     if (ra.score < rb.score) diff++; else if (rb.score < ra.score) diff--;
     h++;
     if (h < 9 ? Math.abs(diff) > 9 - h : diff !== 0) break;
     if (h >= 27) { diff = Math.random() < 0.5 ? 1 : -1; break; } // never happens in practice
   }
   const res = h < 9 ? `${Math.abs(diff)}&${9 - h}` : h === 9 ? `${Math.abs(diff)} up` : `on the ${ordinal(h)}`;
-  return { h: holes, w: diff > 0 ? 0 : 1, res };
+  return { h: holes, s: shots, w: diff > 0 ? 0 : 1, res };
 }
 async function lockMatch(ev: any, s: any, done: string[]) {
   const { data: claimed } = await sb.from('events').update({ status: 'locked', rounds_done: 1 }).eq('id', ev.id).eq('status', 'open').select('id');
@@ -270,7 +271,13 @@ async function lockMatch(ev: any, s: any, done: string[]) {
   while (true) {
     const m = cur.map(([a, b]) => b === null ? { a, b, h: [], w: 0, res: 'bye' } : mpMatch(gm.get(a!), gm.get(b), course, wind)).map((x: any, i: number) => ({ a: cur[i][0], b: cur[i][1], ...x }));
     const len = Math.max(0, ...m.map((x: any) => x.h.length));
-    rounds.push({ start: t0, len, m }); t0 += len * T + 30;
+    const Rd: any = { start: t0, len, m };
+    // the two beaten semifinalists play off for third alongside the final
+    if (m.length === 1 && rounds.length) {
+      const semi = rounds[rounds.length - 1].m.filter((x: any) => x.b !== null).map((x: any) => (x.w ? x.a : x.b));
+      if (semi.length === 2) { Rd.third = { a: semi[0], b: semi[1], ...mpMatch(gm.get(semi[0]), gm.get(semi[1]), course, wind) }; Rd.len = Math.max(len, Rd.third.h.length); }
+    }
+    rounds.push(Rd); t0 += Rd.len * T + 30;
     if (m.length === 1) break;
     const next: (string | null)[][] = []; for (let i = 0; i < m.length; i += 2) next.push([m[i].w ? m[i].b : m[i].a, m[i + 1].w ? m[i + 1].b : m[i + 1].a]);
     cur = next;
@@ -280,26 +287,34 @@ async function lockMatch(ev: any, s: any, done: string[]) {
   await sb.from('events').update({ field: ent.length, purse, meta: { ...(ev.meta || {}), mp: { T, rounds, end: t0, players, wind } } }).eq('id', ev.id);
   done.push(`locked Match Play ${ev.tour}: ${ent.length} golfers, ${rounds.length} rounds`);
 }
-// Prize money goes to the deep runs: champion 40%, runner-up 20%, losing semifinalists share 20%, losing quarterfinalists share 20%.
+// Prize money goes to the deep runs: 1st 40%, 2nd 20%, 3rd 12%, 4th 8%, each beaten quarterfinalist 5%.
+// Smaller brackets use the places they have and scale up to the whole pot.
+const MP_PAY = { p1: 0.4, p2: 0.2, p3: 0.12, p4: 0.08, qf: 0.2 };
+function mpPlaces(mp: any) {
+  const R = mp.rounds.length, last = mp.rounds[R - 1], fin = last.m[0], out: { id: string; place: string; k: string }[] = [];
+  out.push({ id: fin.w ? fin.b : fin.a, place: '1st', k: 'p1' }, { id: fin.w ? fin.a : fin.b, place: '2nd', k: 'p2' });
+  if (last.third) out.push({ id: last.third.w ? last.third.b : last.third.a, place: '3rd', k: 'p3' }, { id: last.third.w ? last.third.a : last.third.b, place: '4th', k: 'p4' });
+  else if (R >= 2) { const semi = mp.rounds[R - 2].m.filter((x: any) => x.b !== null).map((x: any) => (x.w ? x.a : x.b)); for (const id of semi) out.push({ id, place: 'T3', k: 'p34' }); }
+  if (R >= 3) { const q = mp.rounds[R - 3].m.filter((x: any) => x.b !== null).map((x: any) => (x.w ? x.a : x.b)); for (const id of q) out.push({ id, place: 'T5', k: 'qf' }); }
+  return out.filter((x) => x.id);
+}
 function mpPayouts(mp: any, pot: number) {
-  const R = mp.rounds.length, base = [0.4, 0.2, 0.2, 0.2].slice(0, Math.min(R + 1, 4)), tot = base.reduce((a, b) => a + b, 0), pay: Record<string, number> = {};
-  const fin = mp.rounds[R - 1].m[0], champ = fin.w ? fin.b : fin.a; pay[champ] = Math.round(pot * base[0] / tot);
-  for (let r = R - 1; r >= 0; r--) {
-    const lvl = R - r; if (lvl >= base.length) break;
-    const losers = mp.rounds[r].m.filter((x: any) => x.b !== null).map((x: any) => (x.w ? x.a : x.b));
-    for (const id of losers) pay[id] = Math.round(pot * base[lvl] / tot / losers.length);
-  }
-  return { pay, champ };
+  const pl = mpPlaces(mp);
+  const share: Record<string, number> = { p1: MP_PAY.p1, p2: MP_PAY.p2, p3: MP_PAY.p3, p4: MP_PAY.p4, p34: (MP_PAY.p3 + MP_PAY.p4) / 2, qf: MP_PAY.qf / 4 };
+  const used = pl.reduce((a, x) => a + share[x.k], 0), pay: Record<string, number> = {};
+  const places = pl.map((x) => { const amt = Math.round(pot * share[x.k] / used); pay[x.id] = amt; return { id: x.id, place: x.place, amt }; });
+  return { pay, champ: pl[0].id, places };
 }
 async function finalizeMatch(ev: any, s: any, done: string[]) {
   const { data: claimed } = await sb.from('events').update({ status: 'final' }).eq('id', ev.id).eq('status', 'locked').select('id');
   if (!claimed?.length) return;
-  const mp = ev.meta.mp, { pay, champ } = mpPayouts(mp, ev.purse), lv = ev.tour.slice(3);
-  await sb.from('events').update({ meta: { ...ev.meta, mp: { ...mp, pay, champ } } }).eq('id', ev.id);
+  const mp = ev.meta.mp, { pay, champ, places } = mpPayouts(mp, ev.purse), lv = ev.tour.slice(3);
+  await sb.from('events').update({ meta: { ...ev.meta, mp: { ...mp, pay, champ, places } } }).eq('id', ev.id);
+  const placeOf = new Map(places.map((x) => [x.id, x.place]));
   const news: Record<string, string[]> = {};
   for (const id in mp.players) {
     const p = mp.players[id], amt = pay[id] || 0;
-    let out = 'won the Match Play'; if (id !== champ) { const r = mp.rounds.findIndex((R: any) => R.m.some((x: any) => x.b !== null && (x.w ? x.a : x.b) === id)); out = r === mp.rounds.length - 1 ? 'lost the Match Play final' : `went out in round ${r + 1} of the Match Play`; }
+    let out = 'won the Match Play'; if (id !== champ) { const r = mp.rounds.findIndex((R: any) => R.m.some((x: any) => x.b !== null && (x.w ? x.a : x.b) === id)); const pl = placeOf.get(id); out = pl === '2nd' ? 'lost the Match Play final' : pl === '3rd' ? 'won the third-place match at the Match Play' : pl === '4th' ? 'lost the third-place match at the Match Play' : pl === 'T3' ? 'reached the Match Play semifinals' : pl === 'T5' ? 'reached the Match Play quarterfinals' : `went out in round ${r + 1} of the Match Play`; }
     if (amt) await cash(p.mid, amt, 'prize', `${p.name}: Match Play${id === champ ? ' champion' : ''}`);
     const { data: g } = await sb.from('golfers').select('stats').eq('id', id).maybeSingle();
     if (g) { const S = { ...(g.stats || {}) }; S.mp_ev = (S.mp_ev || 0) + 1; S.mp_wins = (S.mp_wins || 0) + (id === champ ? 1 : 0); S.mp_earn = (S.mp_earn || 0) + amt; await sb.from('golfers').update({ stats: S }).eq('id', id); }

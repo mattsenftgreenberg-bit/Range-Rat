@@ -186,17 +186,30 @@ const A: Record<string, (c: any) => Promise<any>> = {
     const mp = ev.meta?.mp, base = { id: ev.id, tour: ev.tour, name: ev.name, ci: ev.ci, purse: ev.purse, fee: ev.fee, status: ev.status, starts_at: ev.starts_at, field: ev.field, round_min: ev.round_min };
     if (!mp) return { board: { event: base, rounds: [] } };
     const fin = ev.status === 'final', t = (Date.now() - Date.parse(ev.starts_at)) / 1000, done = new Map<string, boolean>();
+    const view = (x: any, r: number, R: any, shown: boolean, v: number) => {
+      const h = shown ? x.h.slice(0, Math.max(0, v)) : [], over = shown && v >= x.h.length && (x.b === null ? t >= R.start || fin : true);
+      return { a: shown ? x.a : null, b: shown ? x.b : null, h, over, w: over ? x.w : null, res: over ? x.res : null };
+    };
     const rounds = mp.rounds.map((R: any, r: number) => {
       const v = fin ? 1e9 : Math.max(-1, Math.floor((t - R.start) / mp.T));
-      return { start: R.start, len: R.len, m: R.m.map((x: any, i: number) => {
+      const m = R.m.map((x: any, i: number) => {
         const shown = r === 0 || (done.get(`${r - 1}:${2 * i}`) && done.get(`${r - 1}:${2 * i + 1}`));
-        const h = shown ? x.h.slice(0, Math.max(0, v)) : [], over = shown && v >= x.h.length && (x.b === null ? t >= R.start || fin : true);
-        done.set(`${r}:${i}`, !!over);
-        return { a: shown ? x.a : null, b: shown ? x.b : null, h, over, w: over ? x.w : null, res: over ? x.res : null };
-      }) };
+        const o = view(x, r, R, !!shown, v); done.set(`${r}:${i}`, !!o.over); return o;
+      });
+      const out: any = { start: R.start, len: R.len, m };
+      // third-place match: its golfers are known once both semifinals are over
+      if (R.third) out.third = view(R.third, r, R, !!(done.get(`${r - 1}:0`) && done.get(`${r - 1}:1`)), v);
+      return out;
     });
+    // the shots for one match being watched: only holes already played on the clock, from hole `from` on
+    let shots: any = null;
+    if (b.watch && typeof b.watch === 'string') {
+      const [rs, is] = b.watch.split(':'), r = +rs, R = mp.rounds[r], vis = rounds[r];
+      const x = R && (is === 't' ? R.third : R.m[+is]), xv = vis && (is === 't' ? vis.third : vis.m[+is]);
+      if (x && xv && xv.a && x.s) { const from = Math.max(0, Math.floor(+b.from || 0)); shots = { key: b.watch, from, s: x.s.slice(from, xv.h.length) }; }
+    }
     const players: any = {}; for (const id in mp.players) players[id] = { ...mp.players[id], mine: mp.players[id].mid === uid };
-    return { board: { event: base, rounds, players, T: mp.T, wind: mp.wind, pay: fin ? mp.pay : null, champ: fin ? mp.champ : null, now: new Date().toISOString() } };
+    return { board: { event: base, rounds, players, T: mp.T, wind: mp.wind, pay: fin ? mp.pay : null, champ: fin ? mp.champ : null, places: fin ? mp.places || null : null, shots, now: new Date().toISOString() } };
   },
   async withdraw({ uid, b, s }) {
     const g = await myGolfer(uid, b.id);

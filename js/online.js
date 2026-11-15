@@ -404,7 +404,7 @@ function endHoleA(){const A=ui.anim,x=A.cur,sc=watchScores(),s=sc[x.round]&&sc[x
   if(s!==undefined){const d=s-A.h.par,t=totThrough(x.round,x.hole);feedA(`${SCORE_NAMES[d]||'A '+s}. He is ${t===0?'level par':fmtPar(t)}${x.round?' for the week':''} through ${x.hole+1}.`,'big');}
   A.phase='post';A.w=0;A.shown=Math.max(A.shown??-1,hkey(x.round,x.hole));paintSide();}
 function fitCanvas(){const cv=document.getElementById('cv');if(!cv)return;const dpr=Math.min(2,window.devicePixelRatio||1),r=cv.getBoundingClientRect();cv.width=Math.max(200,Math.round(r.width*dpr));cv.height=Math.max(250,Math.round(r.height*dpr));if(ui.anim)ui.anim.cam=null;}
-function camFor(A,green){const cv=document.getElementById('cv'),W=cv.width,H=cv.height,h=A.h;
+function camFor(A,green,cv){cv=cv||document.getElementById('cv');const W=cv.width,H=cv.height,h=A.h;
   if(green)return{x:h.green[0],y:h.green[1],s:Math.min(W,H)/110};const b=h.box;return{x:(b[0]+b[2])/2,y:(b[1]+b[3])/2,s:Math.min(W/(b[2]-b[0]),H/(b[3]-b[1]))};}
 let rafOn=false,lastTs=0;
 function startLoop(){fitCanvas();paintHUD();paintSide();if(!rafOn){rafOn=true;lastTs=performance.now();requestAnimationFrame(frame);}}
@@ -417,12 +417,7 @@ function frame(ts){const A=ui.anim;if(ui.view!=='board'||!ui.watch||!A||!documen
     drawMap(dt);
   }
   requestAnimationFrame(frame);}
-function drawMap(dt){
-  const A=ui.anim,cv=document.getElementById('cv');if(!cv||!A.h)return;const c=cv.getContext('2d'),W=cv.width,H=cv.height,h=A.h,shots=A.cur.shots,sh=shots[Math.min(A.si,shots.length-1)];
-  const moving=A.phase==='shot',e=moving?1-Math.pow(1-A.t,2.2):1,ball=moving?lerp(sh.from,sh.to,e):sh.to;
-  const tgt=camFor(A,dist(moving?sh.from:sh.to,h.green)<=52);
-  if(!A.cam)A.cam=tgt;else{const k=1-Math.exp(-(dt||16)/260);A.cam={x:A.cam.x+(tgt.x-A.cam.x)*k,y:A.cam.y+(tgt.y-A.cam.y)*k,s:A.cam.s+(tgt.s-A.cam.s)*k};}
-  const cam=A.cam,X=x=>(x-cam.x)*cam.s+W/2,Y=y=>H/2-(y-cam.y)*cam.s,Sc=cam.s;
+function drawCourse(c,W,H,h,X,Y,Sc){
   c.fillStyle=MAP.tree;c.fillRect(0,0,W,H);
   c.fillStyle=MAP.dot;for(const t of h.trees){c.beginPath();c.arc(X(t[0]),Y(t[1]),Math.max(1.5,t[2]*Sc),0,6.3);c.fill();}
   c.lineCap='round';c.lineJoin='round';
@@ -436,6 +431,16 @@ function drawMap(dt){
   c.fillStyle=MAP.fringe;c.beginPath();c.arc(X(h.green[0]),Y(h.green[1]),(h.gr+3)*Sc,0,6.3);c.fill();
   c.fillStyle=MAP.green;c.beginPath();c.arc(X(h.green[0]),Y(h.green[1]),h.gr*Sc,0,6.3);c.fill();
   c.fillStyle=MAP.sand;for(const b of h.sand){c.beginPath();c.arc(X(b.x),Y(b.y),b.r*Sc,0,6.3);c.fill();}
+}
+function drawFlag(c,px,py,u){c.strokeStyle='#10201a';c.lineWidth=Math.max(1.5,u*.14);c.beginPath();c.moveTo(px,py);c.lineTo(px,py-u*2.2);c.stroke();
+  c.fillStyle='#e3b420';c.beginPath();c.moveTo(px,py-u*2.2);c.lineTo(px+u*1.3,py-u*1.75);c.lineTo(px,py-u*1.3);c.fill();}
+function drawMap(dt){
+  const A=ui.anim,cv=document.getElementById('cv');if(!cv||!A.h)return;const c=cv.getContext('2d'),W=cv.width,H=cv.height,h=A.h,shots=A.cur.shots,sh=shots[Math.min(A.si,shots.length-1)];
+  const moving=A.phase==='shot',e=moving?1-Math.pow(1-A.t,2.2):1,ball=moving?lerp(sh.from,sh.to,e):sh.to;
+  const tgt=camFor(A,dist(moving?sh.from:sh.to,h.green)<=52);
+  if(!A.cam)A.cam=tgt;else{const k=1-Math.exp(-(dt||16)/260);A.cam={x:A.cam.x+(tgt.x-A.cam.x)*k,y:A.cam.y+(tgt.y-A.cam.y)*k,s:A.cam.s+(tgt.s-A.cam.s)*k};}
+  const cam=A.cam,X=x=>(x-cam.x)*cam.s+W/2,Y=y=>H/2-(y-cam.y)*cam.s,Sc=cam.s;
+  drawCourse(c,W,H,h,X,Y,Sc);
   const px=X(h.pin[0]),py=Y(h.pin[1]),u=Math.max(W/55,5);
   const holed=!!sh.holed,sunk=holed&&!moving,hw=sunk?(A.phase==='wait'?A.w/1000:1):0;
   c.fillStyle='#10201a';c.beginPath();c.arc(px,py,Math.max(2.5,.45*Sc),0,6.3);c.fill();
@@ -531,33 +536,183 @@ function mpBanner(t){if(!(t==='all'||t===MP))return '';const qn=D.events.filter(
   const L=['jr','col','p3','p2','p1','c2','c1'],set=D.events.filter(e=>isM(e)&&e.starts_at===qn.starts_at).sort((a,b)=>L.indexOf(a.tour.slice(3))-L.indexOf(b.tour.slice(3)));
   return `<section class="sec qfban mpban"><p class="eyebrow">Every ${S().qf_every_min} minutes, alongside the Quick-Fire Opens</p><h2>Match Play</h2><p>Head to head, nine holes a match, knockout until one golfer is left; a tie after nine goes to sudden death. Only managers' golfers play, and it only goes ahead if at least two rosters enter. ${fmt$(S().mp_fee)} to enter (${fmt$(S().mp_fee_jr)} for juniors). The pot is a guaranteed amount plus every entry fee, and most of it goes to the deep runs.</p>
  <p><b>Next ones ${when(qn.starts_at)}. Entries close in ${until(new Date(deadline(qn)).toISOString())}.</b></p><div class="shop">${set.map(e=>{const n=mine().filter(g=>canPlay(e,g)).length;return `<div class="item"><b>${lvName(e.tour.slice(3))}</b><span>Guaranteed ${fmt$(mpBase(e.tour.slice(3)))} + entries. ${n?`${n} of your golfers can play.`:'None of your golfers play at this level.'}</span><button class="btn sm${n?' primary':''}" data-act="board" data-v="${e.id}">${n?'Enter golfers':'See entries'}</button></div>`;}).join('')}</div></section>`;}
-const MP_SHARE=[['Champion',.4,1],['Runner-up',.2,1],['Losing semifinalists',.2,2],['Losing quarterfinalists',.2,4]];
-function mpPayHTML(e){const n=ui.preview&&ui.preview.eid===e.id?ui.preview.rows.length:0,pot=mpBase(e.tour.slice(3))+e.fee*n;
-  let R=0;while((1<<R)<Math.max(2,n))R++;const lv=MP_SHARE.slice(0,Math.min(R+1,4)),tot=lv.reduce((a,x)=>a+x[1],0);
-  return `<section class="sec paysec"><h2>Prize money</h2><p class="muted small">Pot so far ${fmt$(pot)}: the guaranteed ${fmt$(mpBase(e.tour.slice(3)))} plus ${fmt$(e.fee)} for every entry. Shown for a bracket of ${Math.max(2,n)}.</p>
- <div class="scroll"><table class="tbl"><thead><tr><th>Finish</th><th class="num">Prize each</th></tr></thead><tbody>${lv.map(([l,sh,c])=>`<tr><td>${l}</td><td class="num">${fmt$(Math.round(pot*sh/tot/c))}</td></tr>`).join('')}</tbody></table></div>
- <p class="muted small">Golfers who go out earlier win nothing. Golfers from the same roster are kept apart in the first round where the numbers allow. If only one roster enters, it's called off and fees are refunded.</p></section>`;}
-async function loadMp(){if(!ui.ev)return;try{const r=await call('mpBoard',{event:ui.ev});ui.mpb=r.board;}catch(e){ui.mpb={err:e.message};}}
-function mpView(e){const b=ui.mpb&&ui.mpb.event&&ui.mpb.event.id===e.id?ui.mpb:null;if(!b){loadMp().then(()=>{if(ui.view==='board')render();});return '<section class="sec"><p class="muted">Loading the bracket\u2026</p></section>';}
+// The prize plan for a bracket of n golfers: who gets what share of the pot.
+const MPC=['#f2c230','#5b8cff']; // top golfer gold, bottom golfer blue: tracers, balls, scorecard and bracket dots
+function mpPlan(n){n=Math.max(2,n);let R=0;while((1<<R)<n)R++;
+  const L=[{place:'1st',how:'Wins the final',sh:.4,c:1},{place:'2nd',how:'Loses the final',sh:.2,c:1}];
+  if(R>=2){if(n>=4)L.push({place:'3rd',how:'Wins the third-place match',sh:.12,c:1},{place:'4th',how:'Loses the third-place match',sh:.08,c:1});else L.push({place:'3rd',how:'Loses in the semifinals',sh:.1,c:1});}
+  if(R>=3){const q=R===3?n-4:4;if(q>0)L.push({place:q>1?`5th–${4+q}th`:'5th',how:`Loses in the quarterfinals${q>1?' (each)':''}`,sh:.05,c:q});}
+  const tot=L.reduce((a,x)=>a+x.sh*x.c,0);L.forEach(x=>x.pct=x.sh/tot);return {L,paid:L.reduce((a,x)=>a+x.c,0),n};}
+function mpPlanTable(n,pot){const {L,paid}=mpPlan(n);
+  return `<div class="scroll"><table class="tbl mppay"><thead><tr><th>Place</th><th>How</th><th class="num">Prize</th></tr></thead><tbody>${L.map(x=>`<tr><td><b>${x.place}</b></td><td>${x.how}</td><td class="num"><b>${fmt$(Math.round(pot*x.pct))}</b>${x.c>1?'<small> each</small>':''}<small class="pct">${Math.round(x.pct*1000)/10}% of the pot</small></td></tr>`).join('')}${n>paid?`<tr class="nopay"><td>${paid+1}th–${n}th</td><td>Out before the quarterfinals</td><td class="num">$0</td></tr>`:''}</tbody></table></div>`;}
+function mpPayHTML(e){const n=ui.preview&&ui.preview.eid===e.id?ui.preview.rows.length:0,base=mpBase(e.tour.slice(3));
+  const k=ui.mpIf&&ui.mpIf.eid===e.id?ui.mpIf.n:Math.max(2,n),pot=base+e.fee*k;
+  const opts=[...new Set([Math.max(2,n),4,8,16,32])].filter(x=>x>=Math.max(2,n)).sort((a,c)=>a-c);
+  return `<section class="sec paysec"><h2>Prize money</h2>
+ <p class="small"><b>Pot ${fmt$(base+e.fee*n)} right now</b>: ${fmt$(base)} guaranteed plus ${fmt$(e.fee)} for each of the ${n} entr${n===1?'y':'ies'}. Every new entry adds ${fmt$(e.fee)}.</p>
+ <div class="ctrl mpif"><span class="muted small">Prizes if this many play:</span>${opts.map(x=>`<button class="btn sm${x===k?' on':''}" data-act="mpIf" data-v="${e.id}|${x}">${x===Math.max(2,n)&&x===n?`${x} (now)`:x}</button>`).join('')}</div>
+ ${mpPlanTable(k,pot)}
+ <p class="muted small">Pot for ${k} golfers: ${fmt$(pot)}. The two beaten semifinalists play a third-place match alongside the final. Golfers from the same roster are kept apart in round one where the numbers allow. If only one roster enters, it's called off and fees are refunded.</p></section>`;}
+async function loadMp(){if(!ui.ev)return;const k=ui.mpw,have=k&&ui.mps&&ui.mps.key===k?ui.mps.s.length:0;
+  try{const r=await call('mpBoard',{event:ui.ev,watch:k||undefined,from:have});ui.mpb=r.board;
+    const sh=r.board&&r.board.shots;if(sh&&sh.key===ui.mpw){if(!ui.mps||ui.mps.key!==sh.key)ui.mps={key:sh.key,s:[]};if(sh.from===ui.mps.s.length)ui.mps.s.push(...sh.s);}
+  }catch(e){ui.mpb={err:e.message};}}
+// one match out of the board by its key: "round:index", or "round:t" for the third-place match
+function mpGet(b,key){if(!b||!key)return null;const [r,i]=key.split(':'),R=b.rounds&&b.rounds[+r];if(!R)return null;return i==='t'?R.third||null:R.m[+i]||null;}
+const mpDiff=(h,n)=>{let d=0;h.slice(0,n).forEach(([s1,s2])=>{if(s1<s2)d++;else if(s2<s1)d--;});return d;};
+const lastName=n=>String(n||'').split(' ').slice(-1)[0];
+function mpStatus(P,a,b,d,n){return d===0?`All square${n?` thru ${n}`:''}`:`${esc(lastName(P[d>0?a:b].name))} ${Math.abs(d)} up thru ${n}`;}
+function mpView(e){const b=ui.mpb&&ui.mpb.event&&ui.mpb.event.id===e.id?ui.mpb:null;if(!b){loadMp().then(()=>{if(ui.view==='board')render();});return '<section class="sec"><p class="muted">Loading the bracket…</p></section>';}
   if(b.err)return `<section class="sec"><p class="muted">${esc(b.err)}</p></section>`;
-  const P=b.players||{},R=b.rounds||[],fin=b.event.status==='final',started=Date.now()>=Date.parse(b.event.starts_at);
-  if(!R.length)return `<section class="teebox"><p class="eyebrow">Entries are closed</p><h2>Drawing the bracket</h2><div class="teeclock" id="teeClock" data-at="${e.starts_at}">${clockTxt(e.starts_at)}</div></section>`;
-  const nm=id=>{const p=P[id];return p?`${flagHTML(p.country)}${esc(p.name)}${ageTag(p.yr,e.tour.slice(3)==='col'?'col0':e.tour.slice(3))}`:'';};
+  if(!(b.rounds||[]).length)return `<section class="teebox"><p class="eyebrow">Entries are closed</p><h2>Drawing the bracket</h2><div class="teeclock" id="teeClock" data-at="${e.starts_at}">${clockTxt(e.starts_at)}</div></section>`;
+  if(!ui.mpw&&!ui.mpwAuto){ui.mpwAuto=1;const k=mpMineLive(b);if(k){ui.mpw=k;setTimeout(()=>loadMp().then(mpPoll),50);}}
+  return `<div id="mpTop" data-fin="${b.event.status==='final'?1:0}">${mpTopHTML(b,e)}</div>${mpWatchHTML(b,e)}<div id="mpBracket">${mpBracketHTML(b,e)}</div>`;}
+// a live match with one of your golfers in it, to open on arrival
+function mpMineLive(b){const P=b.players||{};for(let r=b.rounds.length-1;r>=0;r--){const R=b.rounds[r],all=R.m.map((x,i)=>[x,`${r}:${i}`]).concat(R.third?[[R.third,`${r}:t`]]:[]);
+  for(const [x,k] of all)if(x.a&&x.b&&!x.over&&((P[x.a]||{}).mine||(P[x.b]||{}).mine))return k;}return null;}
+function mpTopHTML(b,e){const P=b.players||{},fin=b.event.status==='final',started=Date.now()>=Date.parse(b.event.starts_at);
+  if(!started&&!fin)return `<section class="teebox"><p class="eyebrow">The bracket is drawn</p><h2>Tees off in</h2><div class="teeclock" id="teeClock" data-at="${e.starts_at}">${clockTxt(e.starts_at)}</div><p class="muted">${Object.keys(P).length} golfers. Pot ${fmt$(b.event.purse)}.</p></section>`;
+  if(fin)return mpResultsHTML(b,e);
+  return `<details class="sec mppaybox"><summary>Prize money: pot ${fmt$(b.event.purse)}, ${Object.keys(P).length} golfers</summary>${mpPlanTable(Object.keys(P).length,b.event.purse)}</details>`;}
+function mpResultsHTML(b,e){const P=b.players||{},ids=Object.keys(P),tl=e.tour.slice(3)==='col'?'col0':e.tour.slice(3);
+  let pl=b.places;if(!pl){pl=Object.keys(b.pay||{}).sort((x,y)=>b.pay[y]-b.pay[x]).map((id,i)=>({id,place:id===b.champ?'1st':i===1?'2nd':'T3',amt:b.pay[id]}));}
+  const paid=new Set(pl.map(x=>x.id)),R=b.rounds;
+  const outIn=id=>{for(let r=0;r<R.length;r++){if(R[r].m.some(x=>x.b!==null&&x.a&&x.b&&(x.w?x.a:x.b)===id))return r;}return -1;};
+  const rest=ids.filter(id=>!paid.has(id)).map(id=>({id,r:outIn(id)})).sort((x,y)=>y.r-x.r);
+  const rn=r=>{const k=R[r].m.length;return k===1?'the final':k===2?'the semifinals':k===4?'the quarterfinals':`round ${r+1}`;};
+  const fm=R[R.length-1].m[0],fin=fm&&fm.res?`beat ${esc(P[fm.w?fm.a:fm.b].name)} ${esc(fm.res)} in the final`:'';
+  const c=pl[0],cp=P[c.id];
+  const who=id=>`${flagHTML(P[id].country)}${esc(P[id].name)}${ageTag(P[id].yr,tl)}<small class="sch">${esc(P[id].stable||'')}</small>`;
+  const step=(x,k)=>x?`<div class="pod p${k}"><div class="pname">${flagHTML(P[x.id].country)}${esc(P[x.id].name)}</div><div class="psub">${esc(P[x.id].stable||'')}</div><div class="pblock"><b>${x.place}</b><span>${fmt$(x.amt)}</span></div></div>`:'';
+  const mineWon=pl.filter(x=>P[x.id].mine).reduce((a,x)=>a+x.amt,0),mineN=ids.filter(id=>P[id].mine).length;
+  return `<section class="podium-wrap"><p class="eyebrow">Final · pot ${fmt$(b.event.purse)}</p><h2 class="champ">${flagHTML(cp.country)}${esc(cp.name)} wins ${fmt$(c.amt)}</h2>
+ <p class="lede">${esc(cp.stable||'')}'s golfer ${fin}.</p>
+ <div class="podium">${step(pl[1],2)}${step(pl[0],1)}${step(pl[2],3)}</div>
+ ${mineN?`<p class="mpyou">${mineWon?`Your golfers won <b>${fmt$(mineWon)}</b> between them.`:'None of your golfers reached the paying places this time.'}</p>`:''}
+ <h3>Results and prize money</h3>
+ <div class="scroll"><table class="tbl mpres"><thead><tr><th>Place</th><th>Golfer</th><th class="num">Prize</th></tr></thead><tbody>
+ ${pl.map(x=>`<tr class="${P[x.id].mine?'me':''}"><td><b>${x.place}</b></td><td>${who(x.id)}</td><td class="num"><b>${fmt$(x.amt)}</b></td></tr>`).join('')}
+ ${rest.map(x=>`<tr class="nopay${P[x.id].mine?' me':''}"><td>Out</td><td>${who(x.id)}<small class="sch">Lost in ${x.r>=0?rn(x.r):'the first round'}</small></td><td class="num">$0</td></tr>`).join('')}
+ </tbody></table></div></section>`;}
+function mpBracketHTML(b,e){const P=b.players||{},R=b.rounds||[],tl=e.tour.slice(3)==='col'?'col0':e.tour.slice(3);
+  const nm=id=>{const p=P[id];return p?`${flagHTML(p.country)}${esc(p.name)}${ageTag(p.yr,tl)}`:'';};
   const st=id=>P[id]?`<small class="sch">${esc(P[id].stable||'')}</small>`:'';
-  const rname=(r)=>{const k=R[r].m.length;return k===1?'Final':k===2?'Semifinals':k===4?'Quarterfinals':`Round ${r+1}`;};
-  const match=(x,r)=>{
-    if(!x.a)return `<div class="mcard wait"><p class="muted small">Waiting for the round before to finish.</p></div>`;
+  const rname=r=>{const k=R[r].m.length;return k===1?'Final':k===2?'Semifinals':k===4?'Quarterfinals':`Round ${r+1}`;};
+  const match=(x,r,key,label)=>{
+    if(!x.a)return `<div class="mcard wait">${label?`<p class="mlab">${label}</p>`:''}<p class="muted small">Waiting for the round before to finish.</p></div>`;
     if(x.b===null)return `<div class="mcard"><div class="mrow win${P[x.a]&&P[x.a].mine?' me':''}"><span>${nm(x.a)}${st(x.a)}</span><b>Bye</b></div></div>`;
-    let d=0;x.h.forEach(([s1,s2])=>{if(s1<s2)d++;else if(s2<s1)d--;});const n=x.h.length,lead=d>0?x.a:d<0?x.b:null;
-    const status=x.over?`${P[x.w?x.b:x.a].name} wins ${x.res}`:!n?(Date.now()<Date.parse(b.event.starts_at)+R[r].start*1000?`Tees off ${until(new Date(Date.parse(b.event.starts_at)+R[r].start*1000).toISOString())==='now'?'now':'in '+until(new Date(Date.parse(b.event.starts_at)+R[r].start*1000).toISOString())}`:'On the first tee'):n>=9?`All square after ${n}: sudden death`:d===0?`All square thru ${n}`:`${P[lead].name} ${Math.abs(d)} up thru ${n}`;
+    const n=x.h.length,d=mpDiff(x.h,n),at=Date.parse(b.event.starts_at)+R[r].start*1000;
+    const status=x.over?`${esc(P[x.w?x.b:x.a].name)} wins ${esc(x.res)}`:!n?(Date.now()<at?`Tees off in ${until(new Date(at).toISOString())}`:'On the first tee'):n>=9&&d===0?`All square after ${n}: sudden death`:mpStatus(P,x.a,x.b,d,n);
     const dots=x.h.map(([s1,s2],i)=>`<i class="${s1<s2?'a':s2<s1?'b':'h'}" title="Hole ${i+1}: ${s1}-${s2}"></i>`).join('');
-    const row=(id,side)=>`<div class="mrow${x.over&&((side===0)===(x.w===0))?' win':''}${P[id]&&P[id].mine?' me':''}"><span>${nm(id)}${st(id)}</span><b>${x.h.filter(([s1,s2])=>side===0?s1<s2:s2<s1).length}</b></div>`;
-    return `<div class="mcard${x.over?' done':n?' live':''}">${row(x.a,0)}${row(x.b,1)}<div class="mdots">${dots}</div><p class="mstat">${status}</p></div>`;};
-  const champ=fin&&b.champ&&P[b.champ];
-  return `${!started&&!fin?`<section class="teebox"><p class="eyebrow">The bracket is drawn</p><h2>Tees off in</h2><div class="teeclock" id="teeClock" data-at="${e.starts_at}">${clockTxt(e.starts_at)}</div><p class="muted">${Object.keys(P).length} golfers. Pot ${fmt$(b.event.purse)}.</p></section>`:''}
-${champ?`<section class="podium-wrap"><p class="eyebrow">Champion</p><h2 class="champ">${flagHTML(champ.country)}${esc(champ.name)}</h2><p class="lede">${esc(champ.stable||'')} takes ${fmt$(b.pay[b.champ]||0)}.</p>${(()=>{const ids=Object.keys(b.pay||{}).filter(id=>id!==b.champ).sort((a,c)=>b.pay[c]-b.pay[a]);return ids.length?`<div class="shop">${ids.map(id=>`<div class="item"><b>${nm(id)}</b><span>${esc(P[id].stable||'')}</span><span class="tag hot">${fmt$(b.pay[id])}</span></div>`).join('')}</div>`:'';})()}</section>`:''}
-${R.map((Rd,r)=>`<section class="sec mround"><h2>${rname(r)}</h2><div class="mgrid">${Rd.m.map(x=>match(x,r)).join('')}</div></section>`).join('')}
-<p class="muted small">Each dot is a hole: gold for the top golfer, blue for the bottom one, grey for a half. Holes appear as they're played, about one every ${Math.round(b.T)} seconds.</p>`;}
+    const row=(id,side)=>`<div class="mrow${x.over&&((side===0)===(x.w===0))?' win':''}${P[id]&&P[id].mine?' me':''}"><span><i class="sw s${side}"></i>${nm(id)}${st(id)}</span><b>${x.h.filter(([s1,s2])=>side===0?s1<s2:s2<s1).length}</b></div>`;
+    const on=ui.mpw===key,canW=Date.now()>=at||n;
+    return `<div class="mcard${x.over?' done':n?' live':''}${on?' watching':''}">${label?`<p class="mlab">${label}</p>`:''}${row(x.a,0)}${row(x.b,1)}<div class="mdots">${dots}</div><div class="mfoot"><p class="mstat">${status}</p>${canW?`<button class="btn xs${on?' on':''}" data-act="mpWatch" data-v="${key}">${on?'Watching':x.over?'Replay':'Watch'}</button>`:''}</div></div>`;};
+  return `${R.map((Rd,r)=>`<section class="sec mround"><h2>${Rd.third?'Final and third place':rname(r)}</h2><div class="mgrid">${Rd.m.map((x,i)=>match(x,r,`${r}:${i}`,Rd.third?'Final':'')).join('')}${Rd.third?match(Rd.third,r,`${r}:t`,'Third-place match'):''}</div></section>`).join('')}
+<p class="muted small">Each dot is a hole: gold for the top golfer, blue for the bottom one, grey for a half. Holes appear as they're played, about one every ${Math.round(b.T)} seconds. Tap Watch to follow a match shot by shot.</p>`;}
+
+/* ---------- Match Play: watching one match on the hole map ---------- */
+function mpWatchHTML(b,e){const k=ui.mpw,x=mpGet(b,k);if(!x||!x.a||!x.b)return '';const P=b.players||{},M=ui.ma&&ui.ma.key===k?ui.ma:{};
+  const chip=(id,side)=>`<div class="mpchip s${side}"><i class="sw s${side}"></i><span>${flagHTML(P[id].country)}<b>${esc(P[id].name)}</b><small>${esc(P[id].stable||'')}</small></span></div>`;
+  const [kr,ki]=k.split(':'),nR=b.rounds[+kr].m.length,lab=ki==='t'?'Third-place match':nR===1?'The final':nR===2?'Semifinal':nR===4?'Quarterfinal':`Round ${+kr+1}`;
+  return `<section class="round mpwatch" id="mpWatchBox" data-k="${k}"><div>
+  <p class="eyebrow mpeye">Watching \u00b7 ${lab}</p>
+  <div class="holebar"><span><b id="mHole">Hole 1</b></span><span id="mMeta"></span><span class="wind"><i id="windArrow">↑</i><span id="windTxt">${b.wind?Math.round(b.wind.mph)+' mph':''}</span></span></div>
+  <canvas id="mcv" aria-label="Top-down map of the hole with both golfers' shots"></canvas>
+  <div class="ctrl"><button class="btn sm" data-act="mPause" id="mPauseBtn">${M.paused?'Play':'Pause'}</button>${[1,2,4].map(s=>`<button class="btn sm${(M.speed||1)===s?' on':''}" data-act="mSpeed" data-v="${s}">${s}×</button>`).join('')}<span class="sp"></span><button class="btn sm${M.live!==false?' on':''}" data-act="mLive">Live</button><button class="btn sm" data-act="mStop">Close</button></div>
+ </div><div>
+  <div class="mpvs">${chip(x.a,0)}<div class="mpst" id="mStat"></div>${chip(x.b,1)}</div>
+  <div class="feed" id="mFeed" aria-live="polite"></div>
+  <div id="mCard"></div>
+  <p class="muted small">Gold is ${esc(P[x.a].name)}, blue is ${esc(P[x.b].name)}. The golfer farther from the hole plays first. Tap a hole on the card to replay it.</p>
+ </div></section>`;}
+// the order the shots are played on one hole: tee shots by honour, then whoever is farther from the flag
+function mpOrder(SA,SB,h,honor){const S=[SA||[],SB||[]],idx=[0,0],out=[],pos=[(S[0][0]||{from:[0,0]}).from,(S[1][0]||{from:[0,0]}).from];
+  while(idx[0]<S[0].length||idx[1]<S[1].length){let p;
+    if(idx[honor]===0&&S[honor].length)p=honor;else if(idx[1-honor]===0&&S[1-honor].length)p=1-honor;
+    else{const left=[0,1].filter(i=>idx[i]<S[i].length);p=left.length===1?left[0]:dist(pos[0],h.pin)>=dist(pos[1],h.pin)?0:1;}
+    do{const sh=S[p][idx[p]++];out.push({p,sh});pos[p]=sh.to;if(!(sh.k==='drop'||sh.k==='pick'))break;}while(idx[p]<S[p].length);}
+  return out;}
+const mWait=sh=>sh.holed?1000:750;
+function mpBegin(i,first){const M=ui.ma,b=ui.mpb,e=b.event,x=mpGet(b,M.key),sh=ui.mps&&ui.mps.key===M.key?ui.mps.s[i]:null;if(!x||!sh)return;
+  const hole=COURSES[e.ci].holes[i%18],prev=i?x.h[i-1]:null,P=b.players;
+  let honor=0;for(let j=i-1;j>=0;j--){const [p,q]=x.h[j];if(p!==q){honor=p<q?0:1;break;}}
+  M.i=i;M.h=hole;M.seq=mpOrder(sh[0],sh[1],hole,honor);M.si=0;M.t=0;M.w=0;M.cam=null;M.trail=[[],[]];M.holed=[false,false];
+  M.pos=[(sh[0][0]||{from:[0,0]}).from,(sh[1][0]||{from:[0,0]}).from];M.phase=M.seq.length?'shot':'post';
+  const tot=M.seq.reduce((a,q)=>a+shotDur(q.sh)+mWait(q.sh),0)+1700;M.fit=Math.max(1,tot/(0.85*(b.T||16)*1000));
+  if(first){M.shown=i-1;M.feed=[];}
+  mFeed(`Hole ${i+1}${i>=9?' (sudden death)':''}. Par ${hole.par}, ${hole.len} yards. ${esc(lastName(P[honor?x.b:x.a].name))} has the honour.`,'big');mHUD();mSide();}
+function mFeed(text,cls,side){const M=ui.ma;M.feed.push({text,cls:cls||'',side});if(M.feed.length>7)M.feed.shift();mPaintFeed();}
+function mPaintFeed(){const M=ui.ma,el=document.getElementById('mFeed');
+  if(M&&el)el.innerHTML=M.feed.map((q,i)=>`<p class="${q.cls}${q.side!==undefined?' s'+q.side:''}${i===M.feed.length-1?' now':''}">${q.side!==undefined?`<i class="sw s${q.side}"></i>`:''}${q.text}</p>`).join('');}
+function mHUD(){const M=ui.ma;if(!M||!M.h)return;const t=document.getElementById('mHole');if(!t)return;t.textContent=`Hole ${M.i+1}`;document.getElementById('mMeta').textContent=`Par ${M.h.par}, ${M.h.len} yards`;
+  const w=ui.mpb&&ui.mpb.wind,wa=document.getElementById('windArrow');if(w&&wa)wa.style.transform=`rotate(${w.dir}rad)`;}
+function mEndHole(){const M=ui.ma,b=ui.mpb,x=mpGet(b,M.key),P=b.players;if(!x)return;const [s1,s2]=x.h[M.i]||[];
+  if(s1!==undefined){const A=esc(lastName(P[x.a].name)),B=esc(lastName(P[x.b].name)),d=mpDiff(x.h,M.i+1),n=M.i+1;
+    const won=s1<s2?0:s2<s1?1:-1;
+    mFeed(won<0?`Halved in ${s1}s. ${d===0?`All square thru ${n}`:`${d>0?A:B} ${Math.abs(d)} up thru ${n}`}.`:`${won?B:A} wins the hole, ${Math.min(s1,s2)} to ${Math.max(s1,s2)}. ${d===0?`All square thru ${n}`:`${d>0?A:B} ${Math.abs(d)} up thru ${n}`}.`,'big',won<0?undefined:won);
+    if(x.over&&M.i===x.h.length-1)mFeed(`${esc(P[x.w?x.b:x.a].name)} wins the match ${esc(x.res)}.`,'big win',x.w);}
+  M.phase='post';M.w=0;M.shown=Math.max(M.shown??-1,M.i);mSide();}
+function mCardHTML(){const M=ui.ma,b=ui.mpb,x=mpGet(b,M.key),P=b.players,e=b.event;if(!x)return '';
+  const holes=COURSES[e.ci].holes,n=Math.max(9,x.h.length),vis=M.live?(M.shown??-1)+1:x.h.length,cols=[...Array(n).keys()];
+  const cell=(i,side)=>{if(i>=vis||!x.h[i])return '<td></td>';const [s1,s2]=x.h[i],s=side?s2:s1,o=side?s1:s2,d=s-holes[i%18].par,on=M.i===i;
+    return `<td class="${d<=-2?'eg':d===-1?'bd':d===1?'bg':d>=2?'db':''}${s<o?' won s'+side:''}" data-act="mHole" data-v="${i}" style="cursor:pointer${on?';outline:2px solid var(--flag)':''}"><s>${s}</s></td>`;};
+  const stat=i=>{if(i>=vis||!x.h[i])return '<td></td>';const d=mpDiff(x.h,i+1);return d===0?'<td class="mst">AS</td>':`<td class="mst s${d>0?0:1}">${Math.abs(d)}<small>up</small></td>`;};
+  return `<div class="scroll"><table class="card mpcard"><tr><th>Hole</th>${cols.map(i=>`<th>${i+1}</th>`).join('')}</tr>
+  <tr><td>Par</td>${cols.map(i=>`<td>${holes[i%18].par}</td>`).join('')}</tr>
+  <tr class="pa"><td><i class="sw s0"></i>${esc(lastName(P[x.a].name))}</td>${cols.map(i=>cell(i,0)).join('')}</tr>
+  <tr class="pb"><td><i class="sw s1"></i>${esc(lastName(P[x.b].name))}</td>${cols.map(i=>cell(i,1)).join('')}</tr>
+  <tr><td>Match</td>${cols.map(stat).join('')}</tr></table></div>`;}
+function mSide(){const M=ui.ma,el=document.getElementById('mCard');if(!M||!el)return;el.innerHTML=mCardHTML();
+  const b=ui.mpb,x=mpGet(b,M.key),st=document.getElementById('mStat');
+  if(x&&st){const vis=M.live?(M.shown??-1)+1:x.h.length,d=mpDiff(x.h,vis),P=b.players;
+    st.innerHTML=x.over&&vis>=x.h.length?`<b class="s${x.w}">${esc(lastName(P[x.w?x.b:x.a].name))} wins ${esc(x.res)}</b>`:d===0?`<b>${vis?'All square':'All square'}</b><small>${vis?`thru ${vis}`:'first tee'}</small>`:`<b class="s${d>0?0:1}">${Math.abs(d)} up</b><small>${esc(lastName(P[d>0?x.a:x.b].name))} thru ${vis}</small>`;}
+  const pb=document.getElementById('mPauseBtn');if(pb)pb.textContent=M.paused?'Play':'Pause';}
+// keep the animation in step with the holes the bracket has revealed so far
+function mpSync(){const k=ui.mpw;if(!k||!document.getElementById('mcv')){return;}
+  const b=ui.mpb,x=mpGet(b,k),S=ui.mps&&ui.mps.key===k?ui.mps.s:[];if(!x)return;const avail=Math.min(x.h.length,S.length);
+  let M=ui.ma;
+  if(!M||M.key!==k){M=ui.ma={key:k,speed:1,paused:false,live:true,feed:[],phase:'idle',i:-1,shown:-1};
+    if(avail)mpBegin(x.over?0:avail-1,true);else{M.h=COURSES[b.event.ci].holes[0];M.i=0;mFeed(x.h.length?'Loading the shots…':'They haven’t teed off yet. Each hole plays out here as it happens.');mHUD();mSide();}}
+  else if(M.live&&!M.seq&&avail)mpBegin(avail-1,true);
+  else if(M.live&&M.phase==='idle'&&M.i+1<avail)mpBegin(M.i+1);
+  mStart();}
+// every five seconds: refresh the bracket and the results without touching the map
+function mpPoll(){const e=evNow(),b=ui.mpb;if(ui.view!=='board'||!e||!b||!b.event||b.event.id!==e.id)return keepScroll(render);
+  const top=document.getElementById('mpTop'),br=document.getElementById('mpBracket'),w=document.getElementById('mpWatchBox');
+  const want=ui.mpw&&mpGet(b,ui.mpw)&&mpGet(b,ui.mpw).a?ui.mpw:null,wasFin=top&&top.dataset.fin==='1',isFin=b.event.status==='final';
+  if(!top||!br||(w?w.dataset.k:null)!==want||wasFin!==isFin)return keepScroll(render);
+  keepScroll(()=>{top.innerHTML=mpTopHTML(b,e);br.innerHTML=mpBracketHTML(b,e);});if(want)mpSync();}
+let mRaf=false,mTs=0;
+function mFit(){const cv=document.getElementById('mcv');if(!cv)return;const dpr=Math.min(2,window.devicePixelRatio||1),r=cv.getBoundingClientRect();cv.width=Math.max(200,Math.round(r.width*dpr));cv.height=Math.max(250,Math.round(r.height*dpr));if(ui.ma)ui.ma.cam=null;}
+function mStart(){if(!mRaf){mFit();mRaf=true;mTs=performance.now();requestAnimationFrame(mFrame);}}
+function mFrame(ts){const M=ui.ma,cv=document.getElementById('mcv');if(ui.view!=='board'||!ui.mpw||!M||!cv){mRaf=false;return;}
+  const b=ui.mpb,x=mpGet(b,M.key),avail=x?Math.min(x.h.length,(ui.mps&&ui.mps.key===M.key?ui.mps.s.length:0)):0,behind=M.live&&x&&!x.over&&avail-1>M.i+1;
+  const dt=M.paused?0:Math.min(60,ts-mTs)*(M.speed||1)*(M.live?(M.fit||1)*(behind?2:1):1);mTs=ts;
+  if(M.seq&&M.seq.length){const q=M.seq[M.si];
+    if(M.phase==='shot'){M.t+=dt/shotDur(q.sh);if(M.t>=1){M.t=1;mFeed(esc(q.sh.text),'',q.p);if(q.sh.k!=='drop'&&q.sh.k!=='pick')M.trail[q.p].push(q.sh);M.pos[q.p]=q.sh.to;if(q.sh.holed)M.holed[q.p]=true;M.phase='wait';M.w=0;}}
+    else if(M.phase==='wait'){M.w+=dt;if(M.w>mWait(q.sh)){M.si++;if(M.si>=M.seq.length){M.si=M.seq.length-1;mEndHole();}else{M.phase='shot';M.t=0;}}}
+    else if(M.phase==='post'){M.w+=dt;if(M.w>1700){M.phase='idle';if(M.live)mpSync();}}}
+  else if(M.phase==='post'){M.w+=dt;if(M.w>1700){M.phase='idle';if(M.live)mpSync();}}
+  mDraw(dt);requestAnimationFrame(mFrame);}
+function mDraw(dt){const M=ui.ma,cv=document.getElementById('mcv');if(!cv||!M.h)return;const c=cv.getContext('2d'),W=cv.width,H=cv.height,h=M.h;
+  const q=M.seq&&M.seq.length?M.seq[Math.min(M.si,M.seq.length-1)]:null,moving=!!q&&M.phase==='shot',ez=moving?1-Math.pow(1-M.t,2.2):1;
+  const focus=q?(moving?q.sh.from:q.sh.to):[0,0],nearG=M.pos?[0,1].every(p=>M.holed[p]||dist(M.pos[p],h.green)<=52)&&dist(focus,h.green)<=52:false;
+  const tgt=camFor({h},nearG,cv);if(!M.cam)M.cam=tgt;else{const k=1-Math.exp(-(dt||16)/260);M.cam={x:M.cam.x+(tgt.x-M.cam.x)*k,y:M.cam.y+(tgt.y-M.cam.y)*k,s:M.cam.s+(tgt.s-M.cam.s)*k};}
+  const cam=M.cam,X=v=>(v-cam.x)*cam.s+W/2,Y=v=>H/2-(v-cam.y)*cam.s,Sc=cam.s,u=Math.max(W/55,5);
+  drawCourse(c,W,H,h,X,Y,Sc);
+  const px=X(h.pin[0]),py=Y(h.pin[1]);c.fillStyle='#10201a';c.beginPath();c.arc(px,py,Math.max(2.5,.45*Sc),0,6.3);c.fill();drawFlag(c,px,py,u);
+  // tracers: a dark edge under each golfer's colour so both read on grass, sand and water
+  const seg=(s,to,col)=>{c.beginPath();c.moveTo(X(s.from[0]),Y(s.from[1]));c.lineTo(X(to[0]),Y(to[1]));c.strokeStyle='rgba(16,32,26,.55)';c.lineWidth=Math.max(3,u*.34);c.stroke();c.strokeStyle=col;c.lineWidth=Math.max(2,u*.2);c.stroke();};
+  c.lineCap='round';
+  if(M.trail)for(const p of [0,1])for(const s of M.trail[p])seg(s,s.to,MPC[p]);
+  let ball=null;if(moving&&q.sh.k!=='drop'&&q.sh.k!=='pick'){ball=lerp(q.sh.from,q.sh.to,ez);seg(q.sh,ball,MPC[q.p]);}
+  if(!M.pos)return;
+  for(const p of [0,1]){if(M.holed[p]&&!(moving&&q.p===p))continue;const at=moving&&q.p===p?(ball||q.sh.from):M.pos[p];
+    const air=moving&&q.p===p&&q.sh.k!=='putt'&&q.sh.k!=='drop'?Math.sin(Math.PI*M.t):0,lift=air*Math.min(H*.09,dist(q.sh.from,q.sh.to)*Sc*.16);
+    const drop=moving&&q.p===p&&q.sh.holed&&M.t>.88?Math.max(0,1-(M.t-.88)/.12):1,br=u*.42*(1+air*.7)*drop;if(br<=.2)continue;
+    const bx=X(at[0]),by=Y(at[1]);c.fillStyle='rgba(0,0,0,.3)';c.beginPath();c.ellipse(bx+lift*.3,by+u*.12,br,br*.6,0,0,6.3);c.fill();
+    c.fillStyle='#fff';c.strokeStyle=MPC[p];c.lineWidth=Math.max(2,u*.22);c.beginPath();c.arc(bx,by-lift,br,0,6.3);c.fill();c.stroke();}
+  if(q&&q.sh.holed&&M.phase==='wait'&&M.w<1000){const hw=M.w/1000;c.strokeStyle=MPC[q.p];c.globalAlpha=1-hw;c.lineWidth=Math.max(2,u*.22);c.beginPath();c.arc(px,py,u*(.6+hw*3.2),0,6.3);c.stroke();c.globalAlpha=1;}}
 /* ---------- the league: every manager's record and roster ---------- */
 async function loadLeague(){const {data}=await SB.rpc('league');ui.league=data||[];if(ui.view==='league'||ui.view==='mgr')render();}
 async function loadMgr(id){ui.mgrG=null;const {data}=await SB.from('golfers').select('*').eq('manager_id',id).order('created_at');ui.mgrG=data||[];if(!ui.league)await loadLeague();ui.mgr=(ui.league||[]).find(m=>m.id===id)||null;if(ui.view==='mgr')render();}
@@ -609,6 +764,7 @@ function render(){nav();const v=document.getElementById('view');const f=V[ui.vie
   const a=document.activeElement,id=a&&a.id,val=a&&a.value;keepScroll(()=>{v.innerHTML=f();});
   if(id){const n=document.getElementById(id);if(n&&n!==a){n.focus();if(n.type==='text'&&val!==undefined)n.value=val;}}
   if(ui.view==='board'&&ui.watch&&document.getElementById('cv'))startLoop();
+  if(ui.view==='board'&&ui.mpw&&document.getElementById('mcv')){mFit();if(ui.ma&&ui.ma.key===ui.mpw){mHUD();mSide();mPaintFeed();}mpSync();}
   const af=document.getElementById('authForm');if(af)af.onsubmit=ev=>{ev.preventDefault();submitAuth();};}
 function go(v){if(v==='league')ui.league=null;ui.view=v;ui.err='';ui.msg='';ui.confirm=null;if(v!=='board'){ui.ev=null;ui.board=null;ui.watch=null;}if(v==='standings')ui.stand=null;render();window.scrollTo(0,0);}
 const val=id=>{const n=document.getElementById(id);return n?n.value:'';};
@@ -627,7 +783,14 @@ document.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');i
   if(a==='stour'){ui.tour=v;ui.stand=null;return render();}
   if(a==='payAll'){ui.payAll=!ui.payAll;return render();}
   if(a==='fullBoard'){ui.full=!ui.full;return render();}
-  if(a==='board'){ui.mpb=null;ui.view='board';ui.ev=v;ui.board=null;ui.watch=null;ui.full=false;ui.preview=null;render();window.scrollTo(0,0);const e=D.events.find(x=>x.id===v);if(e&&phase(e)==='open')loadPreview(e).then(render);loadBoard().then(render);return;}
+  if(a==='board'){ui.mpb=null;ui.mpw=null;ui.ma=null;ui.mps=null;ui.mpwAuto=0;ui.mpIf=null;ui.view='board';ui.ev=v;ui.board=null;ui.watch=null;ui.full=false;ui.preview=null;render();window.scrollTo(0,0);const e=D.events.find(x=>x.id===v);if(e&&phase(e)==='open')loadPreview(e).then(render);loadBoard().then(render);return;}
+  if(a==='mpWatch'){if(ui.mpw===v)return;ui.mpw=v;ui.ma=null;ui.mps=null;loadMp().then(()=>{render();const w=document.getElementById('mpWatchBox');if(w)w.scrollIntoView({block:'start'});});return;}
+  if(a==='mStop'){ui.mpw=null;ui.ma=null;ui.mps=null;return keepScroll(render);}
+  if(a==='mPause'&&ui.ma){ui.ma.paused=!ui.ma.paused;return mSide();}
+  if(a==='mSpeed'&&ui.ma){ui.ma.speed=+v;document.querySelectorAll('[data-act=mSpeed]').forEach(x=>x.classList.toggle('on',x.dataset.v===v));return;}
+  if(a==='mLive'&&ui.ma){const M=ui.ma;M.live=true;b.classList.add('on');const x=mpGet(ui.mpb,M.key),n=x?Math.min(x.h.length,(ui.mps||{s:[]}).s.length):0;if(n){M.shown=n-2;mpBegin(n-1);}return;}
+  if(a==='mHole'&&ui.ma){ui.ma.live=false;const lb=document.querySelector('[data-act=mLive]');if(lb)lb.classList.remove('on');mpBegin(+v);return;}
+  if(a==='mpIf'){const [eid,n]=v.split('|');ui.mpIf={eid,n:+n};return keepScroll(render);}
   if(a==='watch'){ui.watch=v;ui.anim=null;loadWatch().then(()=>{syncAnim();render();window.scrollTo(0,0);});return;}
   if(a==='wStop'){ui.watch=null;ui.anim=null;return render();}
   if(a==='wPause'&&ui.anim){ui.anim.paused=!ui.anim.paused;return paintSide();}
@@ -700,7 +863,7 @@ if(SB){
   // keep things fresh: the world every 30 seconds, an open board every 5
   setInterval(()=>{if(D.user&&D.me&&!ui.busy&&!['auth','join','scout','admin','news'].includes(ui.view)&&!document.hidden){const a=document.activeElement;if(a&&/INPUT|SELECT/.test(a.tagName))return;load().then(()=>{if(ui.view!=='board')render();}).catch(()=>{});}},30000);
   setInterval(()=>{if(ui.view!=='board'||document.hidden)return;const e=evNow();
-    if(e&&isM(e)&&phase(e)!=='open'){loadMp().then(()=>keepScroll(render));return;}
+    if(e&&isM(e)&&phase(e)!=='open'){loadMp().then(mpPoll);return;}
     if(e&&phase(e)==='open'){(Date.now()%15000<5000?loadPreview(e):Promise.resolve()).then(()=>{const a=document.activeElement;if(!(a&&a.tagName==='SELECT'))keepScroll(render);});return;}
     const was=ui.board&&ui.board.event&&ui.board.event.status,hadPlayers=ui.board&&ui.board.players&&ui.board.players.length;
     loadBoard().then(()=>{const a=document.activeElement;if(a&&a.tagName==='SELECT')return;const e2=evNow(),bb=document.getElementById('boardBox');
@@ -708,4 +871,4 @@ if(SB){
       if(bb&&ui.board&&e2&&!changed){keepScroll(()=>{bb.innerHTML=boxHTML(ui.board,e2);});paintSide();}
       else{if(e2&&ui.board&&ui.board.event.status==='final'){const d=D.events.find(x=>x.id===ui.ev);if(d)d.status='final';}render();}});},5000);
 }else document.getElementById('view').innerHTML='<p class="lede">Couldn’t load the game. Refresh to try again.</p>';
-window.addEventListener('resize',()=>{if(document.getElementById('cv'))fitCanvas();});
+window.addEventListener('resize',()=>{if(document.getElementById('cv'))fitCanvas();if(document.getElementById('mcv'))mFit();});

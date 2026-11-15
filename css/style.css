@@ -342,7 +342,43 @@ small.age{display:inline-block;margin-left:6px;font-size:.72em;font-weight:500;o
 .mrow.me span{text-decoration:underline;text-underline-offset:3px}
 .mdots{display:flex;flex-wrap:wrap;gap:3px;min-height:10px}
 .mdots i{width:10px;height:10px;border-radius:50%;background:#9aa3a7}
-.mdots i.a{background:#c9a227}.mdots i.b{background:#3a7bd5}
+.mdots i.a{background:#e0ad12}.mdots i.b{background:#5b8cff}
 .mstat{margin:0;font-size:.85rem;color:var(--muted)}
 .mcard.done .mstat{color:inherit;font-weight:600}
 .mrow .sch{margin-left:6px}
+/* ---- online: Match Play, watching one match and the prize table ---- */
+:root{--pa:#e0ad12;--pb:#5b8cff;--pa-ink:#8a6400;--pb-ink:#2456c9;--pa-bg:rgba(224,173,18,.2);--pb-bg:rgba(91,140,255,.18)}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){--pa-ink:#f2c230;--pb-ink:#8fb0ff} }
+:root[data-theme="dark"]{--pa-ink:#f2c230;--pb-ink:#8fb0ff}
+.sw{display:inline-block;width:.75em;height:.75em;border-radius:50%;margin-right:6px;background:#fff;border:2.5px solid var(--line);flex:none;vertical-align:-.05em}
+.sw.s0{border-color:var(--pa)}.sw.s1{border-color:var(--pb)}
+.s0{--side:var(--pa-ink)}.s1{--side:var(--pb-ink)}
+.mfoot{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.mlab{margin:0;font-family:var(--display);text-transform:uppercase;letter-spacing:.06em;font-size:.8rem;color:var(--muted)}
+.mcard.watching{border-color:var(--flag);box-shadow:0 0 0 1px var(--flag)}
+.mpvs{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:8px;align-items:center}
+.mpchip{display:flex;align-items:flex-start;gap:2px;min-width:0;border-left:4px solid var(--pa);padding-left:8px}
+.mpchip.s1{border-left:0;border-right:4px solid var(--pb);padding:0 8px 0 0;flex-direction:row-reverse;text-align:right}
+.mpchip span{display:flex;flex-direction:column;min-width:0;overflow-wrap:anywhere;line-height:1.2}
+.mpchip .sw{display:none}
+.mpchip small{color:var(--muted);font-size:.78rem}
+.mpst{text-align:center;display:flex;flex-direction:column;align-items:center;min-width:5.5em}
+.mpst b{font-family:var(--display);font-size:1.35rem;text-transform:uppercase;line-height:1.05;color:var(--side,var(--ink))}
+.mpst small{color:var(--muted);font-size:.78rem}
+.feed p .sw{width:.65em;height:.65em}
+.feed p.win{color:var(--side,var(--ink))}
+.mpcard td.won.s0{background:var(--pa-bg)}.mpcard td.won.s1{background:var(--pb-bg)}
+.mpcard tr.pa td:first-child,.mpcard tr.pb td:first-child{white-space:nowrap;font-weight:600}
+.mpcard td.mst{font-weight:700;font-size:.85rem;color:var(--side,var(--muted))}
+.mpcard td.mst:not(.s0):not(.s1){color:var(--muted)}
+.mppay td,.mpres td{white-space:normal;vertical-align:top}
+.mppay small{font-size:.75rem;color:var(--muted)}
+.mppay small.pct{display:block}
+.tbl tr.nopay td{color:var(--muted)}
+.mpres .sch{display:block}
+.mpif{flex-wrap:wrap;align-items:center;gap:6px}
+.mppaybox summary{cursor:pointer;font-family:var(--display);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.mppaybox[open] summary{margin-bottom:8px}
+.mpyou{margin:0;font-size:1.05rem}
+.mpcard td.mst small{display:block;font-size:.62rem;font-weight:600;line-height:1;text-transform:uppercase}
+.mpeye{margin:0 0 -6px}
