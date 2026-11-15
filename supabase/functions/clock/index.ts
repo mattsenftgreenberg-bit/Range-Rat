@@ -76,7 +76,7 @@ async function fixedPools(season: number, tours: string[]) {
     }
     const col = E.isCol(tour);
     for (const a of E.pool(tour, season)) {
-      rows.push(golferRow({ ...a, tour, yr: col ? a.yr + 3 : 13 }, { stable: null, career: false, pool_season: col ? season : null, fatigue: 0, sessions: 0 }));
+      rows.push(golferRow({ ...a, tour, yr: col ? a.yr + 3 : tour === 'c1' || tour === 'c2' ? Y.sen + Math.floor(Math.random() * 10) : Y.pro + Math.floor(Math.random() * 16) }, { stable: null, career: false, pool_season: col ? season : null, fatigue: 0, sessions: 0 }));
       secs.push({ ce: a.sk, peak: a.peak, agg: a.agg });
     }
   }
