@@ -79,8 +79,8 @@ async function load(){
 function nav(){
   const n=document.getElementById('nav');if(!n)return;
   if(!D.me||ui.view==='auth'){n.innerHTML='';return;}
-  const tabs=[['stable','Roster'],['range','Range'],['events','Events'],['standings','Standings'],['market','Market'],['news','News'],['guide','How it works']].concat(D.me.is_admin?[['admin','Admin']]:[]);
-  n.innerHTML=`<span class="cash${D.me.cash<0?' red':''}">${fmt$(D.me.cash)}</span>`+tabs.map(([v,l])=>`<button class="btn sm${ui.view===v||(v==='events'&&ui.view==='board')||(v==='stable'&&ui.view==='golfer')?' on':''}" data-act="go" data-v="${v}">${l}</button>`).join('')+`<button class="btn sm" data-act="signOut">Sign out</button>`;
+  const tabs=[['stable','Roster'],['range','Range'],['events','Events'],['standings','Standings'],['market','Market'],['news','News'],['league','League'],['guide','How it works']].concat(D.me.is_admin?[['admin','Admin']]:[]);
+  n.innerHTML=`<span class="cash${D.me.cash<0?' red':''}">${fmt$(D.me.cash)}</span>`+tabs.map(([v,l])=>`<button class="btn sm${ui.view===v||(v==='league'&&ui.view==='mgr')||(v==='events'&&ui.view==='board')||(v==='stable'&&ui.view==='golfer')?' on':''}" data-act="go" data-v="${v}">${l}</button>`).join('')+`<button class="btn sm" data-act="signOut">Sign out</button>`;
 }
 function flash(){return `${ui.err?`<p class="under" role="alert">${esc(ui.err)}</p>`:''}`;}
 const V={
@@ -183,8 +183,8 @@ board(){const b=ui.board,e=evNow();
   const back='<button class="btn sm" data-act="go" data-v="events">← Events</button>';
   const ph=phase(e);
   const head=`<section class="intro"><p class="eyebrow">${T(e.tour).name}${e.test?' · test event':''}</p><h1>${esc(e.name)}</h1><p class="lede">${COURSES[e.ci].name}: ${COURSES[e.ci].blurb} Starts ${when(e.starts_at)}. ${isQ(e)?`Two rounds, no cut. ${e.status==='open'?`Pot so far ${fmt$(qfBase(e.tour.slice(3))+S().qf_add*((ui.preview&&ui.preview.eid===e.id)?ui.preview.rows.length:0))}`:`Pot ${fmt$(e.purse)}`}.`:`Purse ${fmt$(e.purse)}.`}</p>${back}</section>`;
-  if(ph==='open'){const gs=mine().filter(g=>canPlay(e,g));
-    return head+`<section class="sec"><h2>Entries close in ${until(new Date(deadline(e)).toISOString())}</h2>${gs.length?`<div class="shop">${gs.map(g=>evItem(e,g,true)).join('')}</div>`:'<p class="muted">None of your golfers play on this tour.</p>'}${flash()}</section><div class="fieldpay">${previewHTML(e)}${payoutHTML(e)}</div>`;}
+  if(ph==='open'){const gs=mine().filter(g=>canPlay(e,g)),todo=gs.filter(g=>!inField(e,g)),cost=(e.test?0:e.fee)*todo.length;
+    return head+`<section class="sec"><h2>Entries close in ${until(new Date(deadline(e)).toISOString())}</h2>${todo.length>1?`<div class="row" style="justify-content:flex-start;flex-wrap:wrap;margin-bottom:8px"><button class="btn primary sm" data-act="enterAll" data-v="${e.id}" ${ui.busy||D.me.cash<cost?'disabled':''}>Enter all ${todo.length}${cost?` for ${fmt$(cost)}`:''}</button>${D.me.cash<cost?'<span class="muted small">Not enough money for all of them.</span>':''}</div>`:''}${gs.length?`<div class="shop">${gs.map(g=>evItem(e,g,true)).join('')}</div>`:'<p class="muted">None of your golfers play on this tour.</p>'}${flash()}</section><div class="fieldpay">${previewHTML(e)}${payoutHTML(e)}</div>`;}
   if(ph==='closed')return head+teeHTML(e,b);
   if(!b||!b.players)return head+'<section class="sec"><p class="muted">Loading the board…</p></section>';
   if(!b.players.length)return head+`<section class="sec"><p class="muted">Setting the field. The first tee time is ${until(e.starts_at)} away.</p></section>`;
@@ -205,6 +205,8 @@ ${own.length?`<section class="sec mine-list"><h2>Your listings</h2><div class="s
   <div class="row" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn sm" data-act="player" data-v="${m.id}">Scouting report</button><button class="btn sm primary" data-act="buy" data-v="${m.id}" ${full||D.me.cash<m.ask||ui.busy?'disabled':''}>Sign him</button></div></div>`;}).join('')}</div>
 <p class="muted small">${full?`Your roster is full at ${S().max_golfers} active golfers. `:''}Rival coaches buy listed golfers too, so the list changes day to day.</p></section>`;},
 guide:()=>guideHTML(),
+league:()=>leagueHTML(),
+mgr:()=>mgrHTML(),
 player:()=>playerHTML(),
 news:()=>`<section class="intro"><h1>News</h1><p class="lede">${esc(D.me.name)}</p></section><section class="sec">${(D.me.news||[]).length?(D.me.news||[]).map(n=>`<p>${esc(n.t)} <span class="muted small">${when(n.at)}</span></p>`).join(''):'<p class="muted">Nothing yet.</p>'}
  <h2>Roster name</h2><div class="row" style="justify-content:flex-start"><input id="stName" type="text" maxlength="30" value="${esc(D.me.name)}"><button class="btn sm" data-act="rename">Rename</button></div>${flash()}</section>`,
@@ -492,13 +494,28 @@ function coachBoard(g){const cur=g.coach_id&&D.coaches.find(x=>x.id===g.coach_id
  ${cur?`<p>${esc(g.name)} works with <b>${esc(cur.name)}</b> (${fee(cur)}). In his best area a coach multiplies a session by up to \u00d7${S().coach_max}. If he's booked up for the day, your golfer works alone.</p>`:`<p>${esc(g.name)} is working alone. That's free; a coach makes each session count for more.</p>`}
  <details class="cpick"${cur?'':' open'}><summary>${cur?'Change coach':'Choose a coach'} (${list.filter(c=>c.cr.left>0).length} available today)</summary>
  <div class="cgrid"><div class="ccard${cur?'':' on'}"><div class="chead"><b>Work alone</b></div><p class="muted small">No lessons, no fee.</p><div class="cfoot"><span>Free</span>${cur?'<button class="btn sm" data-act="coachpick" data-v="">Work alone</button>':'<span class="tag hot">Current</span>'}</div></div>${list.map(card).join('')}</div></details></section>`;}
+/* ---------- the league: every manager's record and roster ---------- */
+async function loadLeague(){const {data}=await SB.rpc('league');ui.league=data||[];if(ui.view==='league'||ui.view==='mgr')render();}
+async function loadMgr(id){ui.mgrG=null;const {data}=await SB.from('golfers').select('*').eq('manager_id',id).order('created_at');ui.mgrG=data||[];if(!ui.league)await loadLeague();ui.mgr=(ui.league||[]).find(m=>m.id===id)||null;if(ui.view==='mgr')render();}
+function leagueHTML(){const L=ui.league;if(!L){loadLeague();return '<section class="sec"><p class="muted">Loading the league\u2026</p></section>';}
+  return `<section class="intro"><p class="eyebrow">League</p><h1>Every manager</h1><p class="lede">Ranked by prize money won. Tap a manager to see his roster. Bank balances stay private.</p></section>
+<section class="roster">${L.map((m,i)=>`<button class="rcard${m.mine?' me':''}" data-act="mgr" data-v="${m.id}"><div class="rtop"><div class="lrank">${i+1}</div><div class="rwho"><b>${esc(m.name)}${m.mine?' <span class="tag">You</span>':''}</b><span>${m.golfers} golfer${m.golfers===1?'':'s'}${m.coaches?`, ${m.coaches} coach${m.coaches>1?'es':''}`:''} \u00b7 joined ${new Date(m.joined).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span></div></div>
+ <div class="lstats"><div><b>${fmt$(m.prizes)}</b><span>Prize money</span></div><div><b>${m.wins}</b><span>Tour wins</span></div><div><b>${m.qf_wins}</b><span>Quick-Fire wins</span></div><div><b>${m.top10}</b><span>Top tens</span></div><div><b>${m.events}</b><span>Events</span></div><div><b>${fmt$(m.other)}</b><span>NIL, coaching, sales</span></div></div></button>`).join('')}</section>`;}
+function mgrHTML(){const m=ui.mgr,G=ui.mgrG;const back='<button class="btn sm" data-act="go" data-v="league">\u2190 League</button>';
+  if(!G)return `<section class="sec">${back}<p class="muted">Loading the roster\u2026</p></section>`;
+  const act=G.filter(g=>!g.retired),co=G.filter(g=>g.retired);
+  const card=g=>`<button class="rcard" data-act="player" data-v="${g.id}"><div class="rtop">${avatarO(g)}<div class="rwho"><b>${flagHTML(g.country)}${esc(g.name)}</b><span>Age ${ageOf(g.yr)} \u00b7 ${tourOf(g)}</span><span>${(g.stats&&g.stats.wins)||0} wins \u00b7 ${fmt$((g.stats&&g.stats.earn)||0)} earned</span></div><div class="rovr"><b>${Math.round(ovr(g.sk))}</b><span>OVR</span></div></div>
+  <div class="rbars">${'smlx'.split('').map(u=>{const v=um(g.sk,u);return `<span class="rl">${UMB[u]}</span><span class="track"><i style="width:${clamp(v,0,100)}%;background:${barC(v)}"></i></span><b>${Math.round(v)}</b>`;}).join('')}</div>${g.ask?`<span class="tag hot">For sale: ${fmt$(g.ask)}</span>`:''}</button>`;
+  return `<section class="intro"><p class="eyebrow">Roster</p><h1>${esc(m?m.name:'Manager')}</h1>${m?`<div class="lstats wide"><div><b>${fmt$(m.prizes)}</b><span>Prize money</span></div><div><b>${m.wins}</b><span>Tour wins</span></div><div><b>${m.qf_wins}</b><span>Quick-Fire wins</span></div><div><b>${m.top10}</b><span>Top tens</span></div><div><b>${m.events}</b><span>Events</span></div><div><b>${fmt$(m.other)}</b><span>NIL, coaching, sales</span></div></div>`:''}${back}</section>
+<section class="roster">${act.length?act.map(card).join(''):'<p class="muted">No active golfers.</p>'}</section>
+${co.length?`<section class="sec"><h2>Coaches</h2><div class="shop">${co.map(c=>`<div class="item"><b>${flagHTML(c.country)}${esc(c.name)}</b><span>${c.cr&&c.cr.o?`Short ${c.cr.o.s}, irons ${c.cr.o.m}, long ${c.cr.o.l}, head ${c.cr.o.x}. ${fmt$(c.cr.price)} a lesson.`:'Retired.'}</span></div>`).join('')}</div></section>`:''}`;}
 /* ---------- a golfer's full profile: for the market (with a scouting report) or anyone you click ---------- */
 const barC=v=>{v=Math.round(v);return v>=75?'var(--good)':v>=60?'var(--mid)':'var(--bad)';};
 async function loadPlayer(id){ui.pl=null;ui.rep=null;const {data}=await SB.from('golfers').select('*').eq('id',id).maybeSingle();ui.pl=data;
   if(data&&!data.retired&&(data.ask||data.manager_id===D.user.id)){try{const r=await call('report',{id});ui.rep=r.report;}catch(e){ui.rep={err:e.message};}}
   if(ui.view==='player')render();}
 function scoringAvg(s){return s&&s.rounds?s.par/s.rounds:null;}
-function playerHTML(){const g=ui.pl;const back=`<button class="btn sm" data-act="go" data-v="${ui.from||'market'}">← ${ui.from==='events'?'Events':'Market'}</button>`;
+function playerHTML(){const g=ui.pl;const back=ui.from==='mgr'&&ui.mid?`<button class="btn sm" data-act="mgr" data-v="${ui.mid}">← ${esc((ui.mgr&&ui.mgr.name)||'Roster')}</button>`:`<button class="btn sm" data-act="go" data-v="${ui.from||'market'}">← ${{events:'Events',league:'League'}[ui.from]||'Market'}</button>`;
   if(!g)return `<section class="sec">${back}<p class="muted">Loading his file…</p></section>`;
   const val=valueOfC(g.sk,g.yr),mineG=g.manager_id===D.user.id,full=mine().length>=S().max_golfers,sa=scoringAvg(g.stats),R=ui.rep;
   const seasons=(g.seasons||[]).slice().reverse();
@@ -512,10 +529,10 @@ ${seasons.length?`<h3>Seasons</h3><div class="scroll"><table class="tbl"><thead>
 /* ---------- render and events ---------- */
 function keepScroll(fn){const bs=document.getElementById('bscroll'),top=bs?bs.scrollTop:0,y=window.scrollY;fn();const b2=document.getElementById('bscroll');if(b2&&top)b2.scrollTop=top;if(Math.abs(window.scrollY-y)>2)window.scrollTo(0,y);}
 function route(){const v=ui.view;if(['loading','auth','join'].includes(v))return '';
-  return '#'+(v==='board'&&ui.ev?'board/'+ui.ev+(ui.watch?'/'+ui.watch:''):(v==='golfer'||v==='range')&&ui.sel?v+'/'+ui.sel:v==='player'&&ui.pid?'player/'+ui.pid:(v==='standings'||v==='events')&&ui.tour?v+'/'+ui.tour:v);}
+  return '#'+(v==='board'&&ui.ev?'board/'+ui.ev+(ui.watch?'/'+ui.watch:''):(v==='golfer'||v==='range')&&ui.sel?v+'/'+ui.sel:v==='mgr'&&ui.mid?'mgr/'+ui.mid:v==='player'&&ui.pid?'player/'+ui.pid:(v==='standings'||v==='events')&&ui.tour?v+'/'+ui.tour:v);}
 function applyRoute(){const h=decodeURIComponent(location.hash.slice(1));if(!h||h.includes('=')||!D.me)return false;const [v,a,b]=h.split('/');
   if(!V[v]||['loading','auth','join'].includes(v)||(v==='admin'&&!D.me.is_admin))return false;
-  if(v==='coaches')ui.view='range';else if(v==='stable'&&a){ui.view='golfer';ui.sel=a;}else ui.view=v;if((v==='golfer'||v==='range')&&a)ui.sel=a;if(v==='player'){if(!a)return false;ui.pid=a;ui.from='market';loadPlayer(a);}if((v==='standings'||v==='events')&&a)ui.tour=a;
+  if(v==='coaches')ui.view='range';else if(v==='stable'&&a){ui.view='golfer';ui.sel=a;}else ui.view=v;if((v==='golfer'||v==='range')&&a)ui.sel=a;if(v==='mgr'){if(!a)return false;ui.mid=a;loadMgr(a);}if(v==='player'){if(!a)return false;ui.pid=a;ui.from='market';loadPlayer(a);}if((v==='standings'||v==='events')&&a)ui.tour=a;
   if(v==='board'){if(!a)return false;ui.ev=a;ui.watch=b||null;ui.anim=null;ui.board=null;
     loadBoard().then(()=>{const e=evNow();if(e&&phase(e)==='open')return loadPreview(e).then(render);render();});}
   return true;}
@@ -525,13 +542,14 @@ function render(){nav();const v=document.getElementById('view');const f=V[ui.vie
   if(id){const n=document.getElementById(id);if(n&&n!==a){n.focus();if(n.type==='text'&&val!==undefined)n.value=val;}}
   if(ui.view==='board'&&ui.watch&&document.getElementById('cv'))startLoop();
   const af=document.getElementById('authForm');if(af)af.onsubmit=ev=>{ev.preventDefault();submitAuth();};}
-function go(v){ui.view=v;ui.err='';ui.msg='';ui.confirm=null;if(v!=='board'){ui.ev=null;ui.board=null;ui.watch=null;}if(v==='standings')ui.stand=null;render();window.scrollTo(0,0);}
+function go(v){if(v==='league')ui.league=null;ui.view=v;ui.err='';ui.msg='';ui.confirm=null;if(v!=='board'){ui.ev=null;ui.board=null;ui.watch=null;}if(v==='standings')ui.stand=null;render();window.scrollTo(0,0);}
 const val=id=>{const n=document.getElementById(id);return n?n.value:'';};
 document.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');if(!b)return;const a=b.dataset.act,v=b.dataset.v;
   if(a==='go')return go(v);
   if(a==='player'){ui.from=ui.view==='player'?ui.from:ui.view;ui.pid=v;ui.view='player';ui.err='';ui.msg='';render();window.scrollTo(0,0);loadPlayer(v);return;}
   if(a==='authMode'){ui.auth={...ui.auth,mode:v,msg:'',err:false};return render();}
   if(a==='signOut')return signOut();
+  if(a==='mgr'){ui.mid=v;ui.view='mgr';ui.mgr=(ui.league||[]).find(m=>m.id===v)||null;render();window.scrollTo(0,0);loadMgr(v);return;}
   if(a==='golfer'){ui.sel=v;ui.view='golfer';ui.msg='';ui.err='';ui.confirm=null;render();window.scrollTo(0,0);return;}
   if(a==='coachpick'){const gg=G();return act('coach',{id:gg.id,coach:v||null},()=>{ui.msg=v?'Coach booked for his sessions.':'He will work alone.';});}
   if(a==='sel'){ui.sel=v;ui.msg='';ui.err='';ui.confirm=null;return render();}
@@ -557,6 +575,7 @@ document.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');i
   if(a==='orders'){const f=val('oFocus');return act('orders',{id:g.id,orders:f?{focus:f,rest_below:+val('oRest'),report:true}:null},()=>{ui.msg='Standing orders saved.';});}
   if(a==='gear')return act('gear',{id:g.id,u:v});
   if(a==='commit')return act('commit',{id:g.id,i:+v});
+  if(a==='enterAll')return act('enterAll',{event:v},async()=>{const e=D.events.find(x=>x.id===v);if(e&&ui.view==='board')await loadPreview(e);});
   if(a==='enter'||a==='withdraw')return act(a,{id:b.dataset.g,event:v},async()=>{const e=D.events.find(x=>x.id===v);if(e&&ui.view==='board')await loadPreview(e);});
   if(a==='list')return act('list',{id:g.id,ask:+val('askIn')});
   if(a==='unlist')return act('unlist',{id:g.id});

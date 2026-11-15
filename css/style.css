@@ -320,3 +320,11 @@ small.age{display:inline-block;margin-left:6px;font-size:.72em;font-weight:500;o
 .mkt .rwho .linkbtn{font:inherit;text-transform:inherit;letter-spacing:inherit;text-align:left;text-decoration:none}
 .mprice{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .mprice b{font-family:var(--display);font-size:1.4rem}
+/* ---- online: the league ---- */
+.rcard.me{border-width:2px}
+.lrank{font-family:var(--display);font-size:2rem;line-height:1;min-width:1.4em;text-align:center}
+.lstats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.lstats>div{display:flex;flex-direction:column;min-width:0}
+.lstats b{font-family:var(--display);font-size:1.15rem;overflow-wrap:anywhere}
+.lstats span{font-size:.75rem;color:var(--muted)}
+.lstats.wide{margin-block:10px 14px;max-width:640px}

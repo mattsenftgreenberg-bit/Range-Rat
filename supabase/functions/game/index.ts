@@ -161,6 +161,23 @@ const A: Record<string, (c: any) => Promise<any>> = {
     if (fee) await cash(uid, -fee, 'entry', `Entry: ${ev.name}`, false);
     await sb.from('entries').upsert({ event_id: ev.id, golfer_id: g.id, manager_id: uid, status: 'in', fee });
   },
+  // Enter every golfer who can play this event and isn't in yet. Stops if the money runs out.
+  async enterAll({ uid, b, s }) {
+    const { data: ev } = await sb.from('events').select('*').eq('id', b.event).maybeSingle();
+    if (!ev || ev.status !== 'open' || Date.parse(ev.starts_at) - s.deadline_min * 60e3 <= Date.now()) no('Entries are closed for that event.');
+    const q = String(ev.tour).startsWith('qf:');
+    const { data: gs } = await sb.from('golfers').select('id,name,tour').eq('manager_id', uid).eq('retired', false);
+    const { data: ex } = await sb.from('entries').select('golfer_id,status').eq('event_id', ev.id).eq('manager_id', uid);
+    const inn = new Set((ex || []).filter((x: any) => x.status === 'in').map((x: any) => x.golfer_id));
+    const todo = (gs || []).filter((g: any) => (q ? ev.tour === 'qf:' + (E.isCol(g.tour) ? 'col' : g.tour) : ev.tour === g.tour) && !inn.has(g.id));
+    if (!todo.length) no('All your golfers who can play are already in.');
+    const fee = ev.test ? 0 : ev.fee; let n = 0, short = 0;
+    for (const g of todo) {
+      if (fee) { try { await cash(uid, -fee, 'entry', `Entry: ${ev.name} (${g.name})`, false); } catch { short++; continue; } }
+      await sb.from('entries').upsert({ event_id: ev.id, golfer_id: g.id, manager_id: uid, status: 'in', fee }); n++;
+    }
+    return { msg: `${n} golfer${n === 1 ? '' : 's'} entered${fee ? ` for ${fmt$(fee * n)}` : ''}.${short ? ` ${short} left out: not enough money.` : ''}` };
+  },
   async withdraw({ uid, b, s }) {
     const g = await myGolfer(uid, b.id);
     const { data: ev } = await sb.from('events').select('*').eq('id', b.event).maybeSingle();
