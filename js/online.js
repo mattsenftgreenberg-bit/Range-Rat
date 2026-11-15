@@ -153,8 +153,10 @@ golfer(){
   const picker=`<div class="row" style="justify-content:flex-start;flex-wrap:wrap">${D.golfers.map(x=>`<button class="btn sm${x.id===g.id?' on':''}" data-act="sel" data-v="${x.id}">${esc(x.name)}${x.retired?' (coach)':''}</button>`).join('')}${mine().length<S().max_golfers?'<button class="btn sm" data-act="go" data-v="scout">+ Scout a junior</button>':''}</div>`;
   const head=`<section class="sec"><button class="btn sm" data-act="go" data-v="stable">\u2190 Roster</button><div class="who">${avatarO(g)}<div><h1>${flagHTML(g.country)} ${esc(g.name)}</h1><p class="muted">${g.arch?esc(g.arch)+'. ':''}Age ${ageOf(g.yr)}. ${tourOf(g)}. Overall ${Math.round(ovr(g.sk))}.</p></div></div>${picker}</section>`;
   if(g.retired)return head+coachMine(g);
+  if(!ui.myRep||ui.myRep.id!==g.id)loadMyReport(g.id);
+  const scout=`<section class="sec"><h2>Scouting report</h2>${reportBody(g,ui.myRep&&ui.myRep.id===g.id?ui.myRep.r:null)}</section>`;
   const ups=D.events.filter(e=>isQ(e)&&canPlay(e,g)&&phase(e)==='open').slice(0,2).concat(D.events.filter(e=>e.tour===g.tour&&e.status!=='final').slice(0,5));
-  return head+`
+  return head+scout+`
 <section class="sec"><div class="row" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn primary sm" data-act="go" data-v="range">Range and lessons</button><span class="muted small">${g.sessions>0?`${g.sessions} range session${g.sessions>1?'s':''} left today.`:'Done on the range for today.'} ${g.coach_id&&D.coaches.find(x=>x.id===g.coach_id)?`Coach: ${esc(D.coaches.find(x=>x.id===g.coach_id).name)}.`:'No coach.'}</span></div></section>
 <section class="sec">
  <h2>His events</h2>
@@ -535,6 +537,10 @@ function mgrHTML(){const m=ui.mgr,G=ui.mgrG;const back='<button class="btn sm" d
   return `<section class="intro"><p class="eyebrow">Roster</p><h1>${esc(m?m.name:'Manager')}</h1>${m?`<div class="lstats wide"><div><b>${fmt$(m.prizes)}</b><span>Prize money</span></div><div><b>${m.wins}</b><span>Tour wins</span></div><div><b>${m.qf_wins}</b><span>Quick-Fire wins</span></div><div><b>${m.top10}</b><span>Top tens</span></div><div><b>${m.events}</b><span>Events</span></div><div><b>${fmt$(m.other)}</b><span>NIL, coaching, sales</span></div></div>`:''}${back}</section>
 <section class="roster">${act.length?act.map(card).join(''):'<p class="muted">No active golfers.</p>'}</section>
 ${co.length?`<section class="sec"><h2>Coaches</h2><div class="shop">${co.map(c=>`<div class="item"><b>${flagHTML(c.country)}${esc(c.name)}</b><span>${c.cr&&c.cr.o?`Short ${c.cr.o.s}, irons ${c.cr.o.m}, long ${c.cr.o.l}, head ${c.cr.o.x}. ${fmt$(c.cr.price)} a lesson.`:'Retired.'}</span></div>`).join('')}</div></section>`:''}`;}
+// Scouting report: the scouts' grade for how high he can go in each area, and where he is now.
+function reportBody(g,R){if(!R)return '<p class="muted">Asking the scouts\u2026</p>';if(R.err)return `<p class="muted">${esc(R.err)}</p>`;
+  return `<p class="muted small">How high the scouts think he can go in each area (A is the highest), with his rating now. They're right most of the time.</p><div class="gfacts">${'smlx'.split('').map(u=>`<div><b class="grade g${R[u].grade}">${R[u].grade}</b><span><b style="font-size:.95rem">${UMB[u]}</b><br>Now ${Math.round(um(g.sk,u))}</span></div>`).join('')}</div>`;}
+async function loadMyReport(id){ui.myRep={id,r:null};try{const r=await call('report',{id});ui.myRep={id,r:r.report};}catch(e){ui.myRep={id,r:{err:e.message}};}if(ui.view==='golfer')render();}
 /* ---------- a golfer's full profile: for the market (with a scouting report) or anyone you click ---------- */
 const barC=v=>{v=Math.round(v);return v>=75?'var(--good)':v>=60?'var(--mid)':'var(--bad)';};
 async function loadPlayer(id){ui.pl=null;ui.rep=null;const {data}=await SB.from('golfers').select('*').eq('id',id).maybeSingle();ui.pl=data;
@@ -547,7 +553,7 @@ function playerHTML(){const g=ui.pl;const back=ui.from==='mgr'&&ui.mid?`<button 
   const seasons=(g.seasons||[]).slice().reverse();
   return `<section class="intro"><p class="eyebrow">${g.ask&&!mineG?'For sale':'Player file'}</p><div class="who">${avatarO(g)}<div><h1>${flagHTML(g.country)} ${esc(g.name)}</h1><p class="muted">${g.arch?esc(g.arch)+'. ':''}Age ${ageOf(g.yr)}. ${tourOf(g)}. Overall ${Math.round(ovr(g.sk))}. ${esc(g.stable||'Tour regular')}.</p></div></div>${back}</section>
 ${g.ask&&!mineG?`<section class="sec"><div class="row" style="justify-content:flex-start;flex-wrap:wrap;gap:12px"><b style="font-size:1.3rem">${fmt$(g.ask)}</b><span class="muted">Market value ${fmt$(val)}. ${g.ask/val<.93?'Priced under value.':g.ask/val>1.1?'Priced over value.':'A fair price.'}</span><button class="btn primary sm" data-act="buy" data-v="${g.id}" ${full||D.me.cash<g.ask||ui.busy?'disabled':''}>Sign him for ${fmt$(g.ask)}</button></div>${flash()}${ui.msg?`<p class="hand">${esc(ui.msg)}</p>`:''}</section>`:''}
-${R?`<section class="sec"><h2>Scouting report</h2>${R.err?`<p class="muted">${esc(R.err)}</p>`:`<p class="muted small">How high the scouts think he can go in each area, and how far he is from it. They're right most of the time.</p><div class="gfacts">${'smlx'.split('').map(u=>`<div><b class="grade g${R[u].grade}">${R[u].grade}</b><span><b style="font-size:.95rem">${UMB[u]}</b><br>Now ${Math.round(um(g.sk,u))}. ${R[u].room}.</span></div>`).join('')}</div>`}</section>`:''}
+${R?`<section class="sec"><h2>Scouting report</h2>${reportBody(g,R)}</section>`:''}
 <section class="sec"><h2>Record</h2><div class="stats"><div><b>${sa===null?'–':(sa>=0?'+':'')+sa.toFixed(1)}</b><span>Scoring avg (to par)</span></div><div><b>${(g.stats&&g.stats.rounds)||0}</b><span>Rounds</span></div></div>${careerHTML(g)}
 ${seasons.length?`<h3>Seasons</h3><div class="scroll"><table class="tbl"><thead><tr><th>Season</th><th>Tour</th><th class="num">Rank</th><th class="num">Pts</th><th class="num">Wins</th><th class="num">Earned</th></tr></thead><tbody>${seasons.map(x=>`<tr><td>${x.s} (age ${ageOf(x.s)})</td><td class="small">${T(x.tour).name}</td><td class="num">${x.rank}</td><td class="num">${fmtPts(x.pts)}</td><td class="num">${x.wins||''}</td><td class="num">${fmt$(x.earn)}</td></tr>`).join('')}</tbody></table></div>`:''}</section>
 <section class="umbs">${'smlx'.split('').map(u=>umbO(g,u,true)).join('')}</section>`;}
