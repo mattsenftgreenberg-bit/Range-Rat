@@ -153,8 +153,8 @@ const A: Record<string, (c: any) => Promise<any>> = {
     const { data: ev } = await sb.from('events').select('*').eq('id', b.event).maybeSingle();
     if (!ev || ev.status !== 'open') no('Entries are closed for that event.');
     if (Date.parse(ev.starts_at) - s.deadline_min * 60e3 <= Date.now()) no('Entries are closed for that event.');
-    const q = String(ev.tour).startsWith('qf:'), level = E.isCol(g.tour) ? 'col' : g.tour;
-    if (q ? ev.tour !== 'qf:' + level : ev.tour !== g.tour) no(`${g.name} doesn't play at that level.`);
+    const q = /^(qf|mp):/.test(String(ev.tour)), level = E.isCol(g.tour) ? 'col' : g.tour;
+    if (q ? ev.tour.slice(3) !== level : ev.tour !== g.tour) no(`${g.name} doesn't play at that level.`);
     const { data: ex } = await sb.from('entries').select('*').eq('event_id', ev.id).eq('golfer_id', g.id).maybeSingle();
     if (ex?.status === 'in') return {};
     const fee = ev.test ? 0 : ev.fee;
@@ -165,11 +165,11 @@ const A: Record<string, (c: any) => Promise<any>> = {
   async enterAll({ uid, b, s }) {
     const { data: ev } = await sb.from('events').select('*').eq('id', b.event).maybeSingle();
     if (!ev || ev.status !== 'open' || Date.parse(ev.starts_at) - s.deadline_min * 60e3 <= Date.now()) no('Entries are closed for that event.');
-    const q = String(ev.tour).startsWith('qf:');
+    const q = /^(qf|mp):/.test(String(ev.tour));
     const { data: gs } = await sb.from('golfers').select('id,name,tour').eq('manager_id', uid).eq('retired', false);
     const { data: ex } = await sb.from('entries').select('golfer_id,status').eq('event_id', ev.id).eq('manager_id', uid);
     const inn = new Set((ex || []).filter((x: any) => x.status === 'in').map((x: any) => x.golfer_id));
-    const todo = (gs || []).filter((g: any) => (q ? ev.tour === 'qf:' + (E.isCol(g.tour) ? 'col' : g.tour) : ev.tour === g.tour) && !inn.has(g.id));
+    const todo = (gs || []).filter((g: any) => (q ? ev.tour.slice(3) === (E.isCol(g.tour) ? 'col' : g.tour) : ev.tour === g.tour) && !inn.has(g.id));
     if (!todo.length) no('All your golfers who can play are already in.');
     const fee = ev.test ? 0 : ev.fee; let n = 0, short = 0;
     for (const g of todo) {
@@ -177,6 +177,26 @@ const A: Record<string, (c: any) => Promise<any>> = {
       await sb.from('entries').upsert({ event_id: ev.id, golfer_id: g.id, manager_id: uid, status: 'in', fee }); n++;
     }
     return { msg: `${n} golfer${n === 1 ? '' : 's'} entered${fee ? ` for ${fmt$(fee * n)}` : ''}.${short ? ` ${short} left out: not enough money.` : ''}` };
+  },
+  // Match Play bracket, revealed hole by hole on the clock: a match's result shows once its last hole has been played,
+  // and a later-round pairing appears once both matches feeding it are decided.
+  async mpBoard({ uid, b }) {
+    const { data: ev } = await sb.from('events').select('*').eq('id', b.event).maybeSingle();
+    if (!ev || !String(ev.tour).startsWith('mp:')) no('No such Match Play.');
+    const mp = ev.meta?.mp, base = { id: ev.id, tour: ev.tour, name: ev.name, ci: ev.ci, purse: ev.purse, fee: ev.fee, status: ev.status, starts_at: ev.starts_at, field: ev.field, round_min: ev.round_min };
+    if (!mp) return { board: { event: base, rounds: [] } };
+    const fin = ev.status === 'final', t = (Date.now() - Date.parse(ev.starts_at)) / 1000, done = new Map<string, boolean>();
+    const rounds = mp.rounds.map((R: any, r: number) => {
+      const v = fin ? 1e9 : Math.max(-1, Math.floor((t - R.start) / mp.T));
+      return { start: R.start, len: R.len, m: R.m.map((x: any, i: number) => {
+        const shown = r === 0 || (done.get(`${r - 1}:${2 * i}`) && done.get(`${r - 1}:${2 * i + 1}`));
+        const h = shown ? x.h.slice(0, Math.max(0, v)) : [], over = shown && v >= x.h.length && (x.b === null ? t >= R.start || fin : true);
+        done.set(`${r}:${i}`, !!over);
+        return { a: shown ? x.a : null, b: shown ? x.b : null, h, over, w: over ? x.w : null, res: over ? x.res : null };
+      }) };
+    });
+    const players: any = {}; for (const id in mp.players) players[id] = { ...mp.players[id], mine: mp.players[id].mid === uid };
+    return { board: { event: base, rounds, players, T: mp.T, wind: mp.wind, pay: fin ? mp.pay : null, champ: fin ? mp.champ : null, now: new Date().toISOString() } };
   },
   async withdraw({ uid, b, s }) {
     const g = await myGolfer(uid, b.id);

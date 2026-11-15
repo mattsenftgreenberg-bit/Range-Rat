@@ -26,6 +26,7 @@ Deno.serve(async (req) => {
     const s = await settings();
     await ensureWorld(s, done);
     await scheduleQuick(s, done);
+    await scheduleMatch(s, done);
     await topUpSeason(s, done);
     await hourly(s, done);
     await backfillStats(done);
@@ -199,11 +200,120 @@ function holeExtras(res: any, h: any) {
   return { gir: reached <= par - 2 ? 1 : 0, drive, ace: res.score === 1 ? 1 : 0, fw, fwc, putts, ud, udc };
 }
 
+// ---------- Match Play: knockout brackets, nine holes a match, managers' golfers only ----------
+// Tour is 'mp:<level>'. The whole bracket is played the moment entries close and kept hidden in the event's meta;
+// the `mpBoard` game action reveals it hole by hole on the clock. Pot = the level's guaranteed amount + every entry fee.
+const isM = (tour: string) => String(tour).startsWith('mp:');
+const mpBase = (s: any, lv: string) => Math.round(s.mp_base * E.TOURS[lv === 'col' ? 'col0' : lv].purse / E.TOURS.col0.purse / 100) * 100;
+const mpFee = (s: any, lv: string) => (lv === 'jr' ? s.mp_fee_jr : s.mp_fee);
+async function scheduleMatch(s: any, done: string[]) {
+  if (!s.mp_on) return;
+  const step = s.qf_every_min * 60e3, first = Math.ceil((Date.now() + (s.deadline_min + 1) * 60e3) / step) * step;
+  const want = [0, 1, 2].map((k) => new Date(first + k * step).toISOString());
+  const { data: have } = await sb.from('events').select('tour,starts_at').like('tour', 'mp:%').gte('starts_at', want[0]);
+  const got = new Set((have || []).map((e: any) => e.tour + '|' + new Date(e.starts_at).toISOString()));
+  const { data: w } = await sb.from('world').select('season').maybeSingle();
+  const rows = want.flatMap((at) => QT.map((lv) => ({ lv, at }))).filter(({ lv, at }) => !got.has('mp:' + lv + '|' + at)).map(({ lv, at }) => ({
+    tour: 'mp:' + lv, season: w?.season || 1, week: 0, name: 'Match Play', ci: Math.floor(Math.random() * E.COURSES.length), type: 'Match Play',
+    purse: mpBase(s, lv), fee: mpFee(s, lv), pm: 0, starts_at: at, round_min: s.round_min, rounds: 1,
+  }));
+  if (rows.length) { await sb.from('events').upsert(rows, { onConflict: 'tour,starts_at', ignoreDuplicates: true }); done.push(`scheduled ${rows.length} Match Play`); }
+}
+// Round-one pairings: keep golfers from the same roster apart where the numbers allow.
+function mpPairs(ent: any[], P: number) {
+  const left = shuffle(ent.slice()), real = P / 2 - (P - ent.length), pairs: any[][] = [];
+  const pickFrom = (avoid: string | null) => {
+    const groups = new Map<string, any[]>(); for (const x of left) { if (!groups.has(x.mid)) groups.set(x.mid, []); groups.get(x.mid)!.push(x); }
+    const order = [...groups.entries()].filter(([m]) => m !== avoid).sort((a, b) => b[1].length - a[1].length);
+    const g = order.length ? order[0][1][0] : left[0]; left.splice(left.indexOf(g), 1); return g;
+  };
+  for (let i = 0; i < real; i++) { const a = pickFrom(null), b = pickFrom(a.mid); pairs.push([a, b]); }
+  for (const x of left) pairs.push([x, null]); // byes
+  return shuffle(pairs);
+}
+function ordinal(n: number) { return n + (['th', 'st', 'nd', 'rd'][n % 10 > 3 || [11, 12, 13].includes(n % 100) ? 0 : n % 10]); }
+// One nine-hole match. Holes after the 9th are sudden death.
+function mpMatch(A: any, B: any, course: any, wind: any) {
+  const sa = E.initState(A, 1, 0, 0), sb2 = E.initState(B, 1, 0, 0), holes: number[][] = [];
+  let diff = 0, h = 0;
+  while (true) {
+    const hole = course.holes[h % 18], tight = (h >= 6 && Math.abs(diff) <= 1) || h >= 9;
+    const ra = E.playHole(A, sa, hole, { wind, pressure: tight, sit: diff < 0 ? 'chase' : diff > 0 ? 'protect' : undefined }); E.afterHole(A, sa, hole, ra);
+    const rb = E.playHole(B, sb2, hole, { wind, pressure: tight, sit: diff > 0 ? 'chase' : diff < 0 ? 'protect' : undefined }); E.afterHole(B, sb2, hole, rb);
+    holes.push([ra.score, rb.score]);
+    if (ra.score < rb.score) diff++; else if (rb.score < ra.score) diff--;
+    h++;
+    if (h < 9 ? Math.abs(diff) > 9 - h : diff !== 0) break;
+    if (h >= 27) { diff = Math.random() < 0.5 ? 1 : -1; break; } // never happens in practice
+  }
+  const res = h < 9 ? `${Math.abs(diff)}&${9 - h}` : h === 9 ? `${Math.abs(diff)} up` : `on the ${ordinal(h)}`;
+  return { h: holes, w: diff > 0 ? 0 : 1, res };
+}
+async function lockMatch(ev: any, s: any, done: string[]) {
+  const { data: claimed } = await sb.from('events').update({ status: 'locked', rounds_done: 1 }).eq('id', ev.id).eq('status', 'open').select('id');
+  if (!claimed?.length) return;
+  const { data: ents } = await sb.from('entries').select('golfer_id,manager_id,fee').eq('event_id', ev.id).eq('status', 'in');
+  const E2 = ents || [];
+  if (new Set(E2.map((x: any) => x.manager_id)).size < 2) {
+    for (const x of E2) if (x.fee) { await cash(x.manager_id, x.fee, 'refund', 'Match Play called off'); await addNews(x.manager_id, [`Match Play called off: only one roster entered. ${fmt$(x.fee)} refunded.`]); }
+    await sb.from('events').delete().eq('id', ev.id); done.push('Match Play skipped: fewer than two rosters'); return;
+  }
+  const ids = E2.map((x: any) => x.golfer_id);
+  const { data: gs } = await sb.from('golfers').select('id,name,country,stable,yr,manager_id,sk,eq,fatigue,conf,carry,color').in('id', ids);
+  const { data: secs } = await sb.from('golfer_secrets').select('golfer_id,peak,agg').in('golfer_id', ids);
+  const sm = new Map((secs || []).map((x: any) => [x.golfer_id, x])), gm = new Map((gs || []).map((g: any) => [g.id, { ...g, peak: (sm.get(g.id) as any)?.peak ?? 1, agg: (sm.get(g.id) as any)?.agg ?? 0 }]));
+  const ent = ids.filter((id: string) => gm.has(id)).map((id: string) => ({ gid: id, mid: (gm.get(id) as any).manager_id }));
+  let P = 1; while (P < ent.length) P *= 2;
+  const course = E.COURSES[ev.ci], wind = { mph: Math.round(4 + Math.random() * 14), dir: Math.random() * Math.PI * 2 };
+  const T = Number(ev.round_min || s.round_min) * 60 / 18, rounds: any[] = [];
+  let cur: (string | null)[][] = mpPairs(ent, P).map(([a, b]) => [a.gid, b ? b.gid : null]), t0 = 0;
+  while (true) {
+    const m = cur.map(([a, b]) => b === null ? { a, b, h: [], w: 0, res: 'bye' } : mpMatch(gm.get(a!), gm.get(b), course, wind)).map((x: any, i: number) => ({ a: cur[i][0], b: cur[i][1], ...x }));
+    const len = Math.max(0, ...m.map((x: any) => x.h.length));
+    rounds.push({ start: t0, len, m }); t0 += len * T + 30;
+    if (m.length === 1) break;
+    const next: (string | null)[][] = []; for (let i = 0; i < m.length; i += 2) next.push([m[i].w ? m[i].b : m[i].a, m[i + 1].w ? m[i + 1].b : m[i + 1].a]);
+    cur = next;
+  }
+  const players: any = {}; for (const g of gm.values() as any) players[g.id] = { name: g.name, country: g.country, stable: g.stable, yr: g.yr, mid: g.manager_id, color: g.color };
+  const purse = mpBase(s, ev.tour.slice(3)) + E2.reduce((a: number, x: any) => a + (x.fee || 0), 0);
+  await sb.from('events').update({ field: ent.length, purse, meta: { ...(ev.meta || {}), mp: { T, rounds, end: t0, players, wind } } }).eq('id', ev.id);
+  done.push(`locked Match Play ${ev.tour}: ${ent.length} golfers, ${rounds.length} rounds`);
+}
+// Prize money goes to the deep runs: champion 40%, runner-up 20%, losing semifinalists share 20%, losing quarterfinalists share 20%.
+function mpPayouts(mp: any, pot: number) {
+  const R = mp.rounds.length, base = [0.4, 0.2, 0.2, 0.2].slice(0, Math.min(R + 1, 4)), tot = base.reduce((a, b) => a + b, 0), pay: Record<string, number> = {};
+  const fin = mp.rounds[R - 1].m[0], champ = fin.w ? fin.b : fin.a; pay[champ] = Math.round(pot * base[0] / tot);
+  for (let r = R - 1; r >= 0; r--) {
+    const lvl = R - r; if (lvl >= base.length) break;
+    const losers = mp.rounds[r].m.filter((x: any) => x.b !== null).map((x: any) => (x.w ? x.a : x.b));
+    for (const id of losers) pay[id] = Math.round(pot * base[lvl] / tot / losers.length);
+  }
+  return { pay, champ };
+}
+async function finalizeMatch(ev: any, s: any, done: string[]) {
+  const { data: claimed } = await sb.from('events').update({ status: 'final' }).eq('id', ev.id).eq('status', 'locked').select('id');
+  if (!claimed?.length) return;
+  const mp = ev.meta.mp, { pay, champ } = mpPayouts(mp, ev.purse), lv = ev.tour.slice(3);
+  await sb.from('events').update({ meta: { ...ev.meta, mp: { ...mp, pay, champ } } }).eq('id', ev.id);
+  const news: Record<string, string[]> = {};
+  for (const id in mp.players) {
+    const p = mp.players[id], amt = pay[id] || 0;
+    let out = 'won the Match Play'; if (id !== champ) { const r = mp.rounds.findIndex((R: any) => R.m.some((x: any) => x.b !== null && (x.w ? x.a : x.b) === id)); out = r === mp.rounds.length - 1 ? 'lost the Match Play final' : `went out in round ${r + 1} of the Match Play`; }
+    if (amt) await cash(p.mid, amt, 'prize', `${p.name}: Match Play${id === champ ? ' champion' : ''}`);
+    const { data: g } = await sb.from('golfers').select('stats').eq('id', id).maybeSingle();
+    if (g) { const S = { ...(g.stats || {}) }; S.mp_ev = (S.mp_ev || 0) + 1; S.mp_wins = (S.mp_wins || 0) + (id === champ ? 1 : 0); S.mp_earn = (S.mp_earn || 0) + amt; await sb.from('golfers').update({ stats: S }).eq('id', id); }
+    (news[p.mid] ??= []).push(`${p.name} ${out}${amt ? `: ${fmt$(amt)}` : ''}.`);
+  }
+  for (const mid in news) await addNews(mid, news[mid]);
+  done.push(`final Match Play ${lv}: won by ${mp.players[champ]?.name}`);
+}
+
 // ---------- events ----------
 async function lockDue(s: any, done: string[]) {
   const cutoff = new Date(Date.now() + s.deadline_min * 60e3).toISOString();
-  const { data: evs } = await sb.from('events').select('*').eq('status', 'open').lte('starts_at', cutoff).order('starts_at').limit(3);
-  for (const ev of evs || []) await (isQ(ev.tour) ? lockEventQ(ev, s, done) : lockEvent(ev, done));
+  const { data: evs } = await sb.from('events').select('*').eq('status', 'open').lte('starts_at', cutoff).order('starts_at').limit(8);
+  for (const ev of evs || []) await (isQ(ev.tour) ? lockEventQ(ev, s, done) : isM(ev.tour) ? lockMatch(ev, s, done) : lockEvent(ev, done));
 }
 async function lockEventQ(ev: any, s: any, done: string[]) {
   const { data: claimed } = await sb.from('events').update({ status: 'locked' }).eq('id', ev.id).eq('status', 'open').select('id');
@@ -306,8 +416,9 @@ async function simRound(ev: any) {
 }
 async function finalizeDue(s: any, done: string[]) {
   const { data: evs } = await sb.from('events').select('*').eq('status', 'locked').lte('starts_at', new Date().toISOString()).order('starts_at').limit(10);
-  const due = (evs || []).filter((ev: any) => ev.rounds_done >= (ev.rounds || 4) && Date.parse(ev.starts_at) + (ev.rounds || 4) * Number(ev.round_min || s.round_min) * 60e3 <= Date.now()).slice(0, 2);
-  for (const ev of due) await (isQ(ev.tour) ? finalizeQuick(ev, s, done) : finalize(ev, s, done));
+  const due = (evs || []).filter((ev: any) => isM(ev.tour) ? !!ev.meta?.mp && Date.parse(ev.starts_at) + ev.meta.mp.end * 1000 <= Date.now()
+    : ev.rounds_done >= (ev.rounds || 4) && Date.parse(ev.starts_at) + (ev.rounds || 4) * Number(ev.round_min || s.round_min) * 60e3 <= Date.now()).slice(0, 2);
+  for (const ev of due) await (isQ(ev.tour) ? finalizeQuick(ev, s, done) : isM(ev.tour) ? finalizeMatch(ev, s, done) : finalize(ev, s, done));
 }
 async function finalize(ev: any, s: any, done: string[]) {
   const { data: claimed } = await sb.from('events').update({ status: 'final' }).eq('id', ev.id).eq('status', 'locked').select('id');

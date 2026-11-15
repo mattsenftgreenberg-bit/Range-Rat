@@ -24,6 +24,7 @@ export const DEFAULTS: Record<string, any> = {
   purse_mult: 1, fee_mult: 1, sale_chance_mult: 1, coach_age_yr: 18, recruit_cost: 5000,
   weekends: true,
   market_size: 14, market_new: 4, ai_coaches: 30, market_prodigy_pct: 1,
+  mp_on: true, mp_fee: 200, mp_fee_jr: 50, mp_base: 5000,
   qf_on: true, qf_every_min: 20, qf_fee: 200, qf_base: 20000, qf_add: 200, qf_bonus: 1000, qf_ace: 1000000,
 };
 export async function settings() {
