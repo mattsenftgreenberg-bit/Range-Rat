@@ -358,5 +358,11 @@ function winProbs(list,N){
   N=N||400;for(let s=0;s<N;s++){let b=1e9,bi=0;for(let i=0;i<n;i++){const t=mu[i]+gauss()*sd[i]+R()*.01;if(t<b){b=t;bi=i;}}w[bi]++;}
   return w.map(x=>(x+.15)/(N+.15*n));
 }
+/* Win and top-K chances from the same simulated finishes (K defaults to 10). */
+function placeProbs(list,N,K){
+  K=K||10;const n=list.length,mean=avg(list.map(x=>x.r)),mu=list.map(x=>x.cur-(x.r-mean)*ODDS.k*x.H),sd=list.map(x=>Math.sqrt(ODDS.v*x.H+Math.pow(ODDS.f*x.H,2))),w=new Array(n).fill(0),tk=new Array(n).fill(0),t=new Array(n),ix=[...Array(n).keys()];
+  N=N||400;for(let s=0;s<N;s++){for(let i=0;i<n;i++)t[i]=mu[i]+gauss()*sd[i]+R()*.01;ix.sort((a,b)=>t[a]-t[b]);w[ix[0]]++;for(let j=0;j<Math.min(K,n);j++)tk[ix[j]]++;}
+  return{win:w.map(x=>(x+.15)/(N+.15*n)),top:tk.map(x=>Math.min(.995,(x+.15)/(N+.15*n/Math.min(K,n))))};
+}
 const LADDER=[[1,10],[1,5],[1,4],[1,3],[2,5],[1,2],[4,6],[4,5],[1,1],[6,5],[5,4],[6,4],[7,4],[2,1],[9,4],[5,2],[3,1],[7,2],[4,1],[9,2],[5,1],[6,1],[7,1],[8,1],[10,1],[12,1],[14,1],[16,1],[20,1],[25,1],[33,1],[40,1],[50,1],[66,1],[80,1],[100,1],[150,1],[200,1],[250,1],[500,1]];
 function oddsLabel(p){const o=(1-p)/Math.max(p,1e-6);let best=LADDER[0],bd=1e9;for(const l of LADDER){const d=Math.abs(Math.log(l[0]/l[1])-Math.log(Math.max(o,.01)));if(d<bd){bd=d;best=l;}}return best[0]===best[1]?'Evens':best[0]+'/'+best[1];}

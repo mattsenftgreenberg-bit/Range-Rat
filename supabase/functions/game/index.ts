@@ -250,6 +250,8 @@ const A: Record<string, (c: any) => Promise<any>> = {
     const { data: ok, error } = await sb.rpc('transfer_golfer', { gid: g.id, buyer: uid, price: g.ask });
     if (error) no(error.message.includes('insufficient_funds') ? 'Not enough money in the bank for that.' : 'That sale fell through.');
     if (!ok) no('The price changed or he was sold. Have another look.');
+    // a tour regular signed straight off the tour: he can train from today
+    if (!g.manager_id) await sb.from('golfers').update({ sessions: s.sessions_per_day, trained: {} }).eq('id', g.id);
     if (g.manager_id) {
       const { data: m } = await sb.from('managers').select('name').eq('id', uid).single();
       await addNews(g.manager_id, [`${m?.name || 'Another manager'} signed ${g.name} from you for ${fmt$(g.ask)}.`]);

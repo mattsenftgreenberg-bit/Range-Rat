@@ -583,18 +583,78 @@ async function backfillStats(done: string[]) {
   done.push(`stats backfilled for ${ids.length} golfers in ${Math.round(performance.now() - t0)}ms`);
 }
 
-// ---------- every hour: new faces on the transfer market, and a full staff of coaches ----------
+// ---------- every hour: the transfer market, and a full staff of coaches ----------
+// From the night of Nov 16 the computer listings are real tour regulars: golfers already playing (and in the standings)
+// on the Collegiate, pro and senior tours. Before that the market made up new faces.
+const MARKET_FROM_REGULARS = '2026-11-17';
 const MARKET_KINDS: [string, number, number][] = [['col0', 4, 56], ['col0', 5, 58], ['col0', 6, 61], ['col0', 7, 64], ['p3', 9, 66], ['p3', 12, 68], ['p2', 10, 71], ['p2', 14, 72], ['p1', 11, 76], ['p1', 16, 77], ['c2', 25, 66], ['c1', 26, 72]];
+const MARKET_TOURS = ['col0', 'col0', 'col0', 'col0', 'p3', 'p3', 'p2', 'p2', 'p1', 'p1', 'c2', 'c1'];
+// golfers playing on a tour now, with points in this season's or last season's standings: the pool regulars and the rival coaches' golfers
+async function regularsOn(tour: string, season: number) {
+  const { data: st } = await sb.from('standings').select('golfer_id').eq('tour', tour).in('season', [season, season - 1]).gt('pts', 0);
+  const inSt = new Set((st || []).map((x: any) => x.golfer_id));
+  const { data } = await sb.from('golfers').select('id,name,sk,yr,career,pool_season').eq('tour', tour).eq('retired', false).is('manager_id', null).is('ask', null);
+  return shuffle(((data || []) as any[]).filter((g) => inSt.has(g.id) && g.yr >= 4 && (g.career || (E.isCol(tour) ? g.pool_season === season : g.pool_season === null))));
+}
+// a regular's record, worked out from the events he has played, so his player file shows it like anyone else's
+async function recordFor(g: any, season: number) {
+  const { data: eps } = await sb.from('event_players').select('scores,ev_par,cut,pos,pos_n,pay,pts,won,extra,events!inner(id,name,tour,season,ci,status,test,starts_at)').eq('golfer_id', g.id).eq('events.status', 'final').eq('events.test', false);
+  const rows = ((eps || []) as any[]).map((r) => ({ ...r, ev: Array.isArray(r.events) ? r.events[0] : r.events })).filter((r) => !/^(qf|mp):/.test(r.ev.tour)).sort((a, b) => (a.ev.starts_at < b.ev.starts_at ? 1 : -1));
+  const S: any = { ev: 0, cuts: 0, wins: 0, top10: 0, earn: 0, rounds: 0, par: 0, low: null, holes: 0, gir: 0, fw: 0, fwc: 0, putts: 0, ud: 0, udc: 0, aces: 0 }, trophies: any[] = [];
+  for (const r of rows) {
+    const pars = E.COURSES[r.ev.ci].holes.map((h: any) => h.par), X = r.extra || {};
+    S.ev++; if (!r.cut) S.cuts++; if (r.won) { S.wins++; trophies.push({ s: r.ev.season, n: r.ev.name, t: r.ev.tour }); } if (!r.cut && r.pos_n && r.pos_n <= 10) S.top10++; S.earn += r.pay || 0;
+    for (const k of ['holes', 'gir', 'fw', 'fwc', 'putts', 'ud', 'udc', 'aces']) S[k] += X[k] || 0;
+    for (const sc of r.scores || []) if (sc.length === 18) { const tp = sumA(sc) - sumA(pars); S.rounds++; S.par += tp; if (S.low === null || tp < S.low) S.low = tp; }
+  }
+  const hist = rows.slice(0, 40).map((r) => ({ s: g.yr - (season - r.ev.season), gs: r.ev.season, n: r.ev.name, t: r.ev.tour, r: (r.scores || []).filter((x: number[]) => x.length === 18).map(sumA), par: r.ev_par, pos: r.cut ? 'MC' : r.pos, pts: r.pts, pay: r.pay, eid: r.ev.id }));
+  // finished seasons, with his rank in each
+  const { data: sts } = await sb.from('standings').select('tour,season,pts,wins,earn').eq('golfer_id', g.id).lt('season', season).order('season');
+  const seasons: any[] = [];
+  for (const x of (sts || []) as any[]) {
+    const { count } = await sb.from('standings').select('golfer_id', { count: 'exact', head: true }).eq('tour', x.tour).eq('season', x.season).gt('pts', x.pts);
+    seasons.push({ s: g.yr - (season - x.season), gs: x.season, tour: x.tour, rank: (count || 0) + 1, pts: x.pts, wins: x.wins, earn: x.earn });
+  }
+  return { stats: S, hist, trophies, seasons };
+}
+// room to grow: a scout's ceiling for a regular, wider for younger golfers
+function regularCeiling(sk: any, yr: number) {
+  const room = yr <= 7 ? 10 : yr <= 12 ? 6 : yr <= 18 ? 3 : 1, base = room * (0.6 + Math.random() * 0.8), ce: any = {};
+  for (const k in sk) ce[k] = Math.min(99, Math.round((sk[k] + Math.max(0.5, base + E.gauss() * room * 0.3)) * 10) / 10);
+  return ce;
+}
 async function hourly(s: any, done: string[]) {
   const { data: w } = await sb.from('world').select('*').maybeSingle();
   if (!w || w.meta?.setting_up || Date.now() - Date.parse(w.meta?.hourly_at || 0) < 3600e3) return;
-  await sb.from('world').update({ meta: { ...w.meta, hourly_at: new Date().toISOString() } }).eq('id', 1);
-  // the oldest few computer listings come off the market (those golfers quietly leave the game)
-  const { data: rl } = await sb.from('golfers').select('id,listed_at').is('manager_id', null).not('ask', 'is', null).eq('retired', false).order('listed_at');
-  const have = rl || [], drop = have.slice(0, Math.max(s.market_new, have.length - s.market_size + s.market_new));
-  if (drop.length) await sb.from('golfers').update({ ask: null, listed_at: null, retired: true }).in('id', drop.map((g: any) => g.id));
+  const regs = etDate() >= MARKET_FROM_REGULARS, firstRegs = regs && !w.meta?.mkt_regs;
+  await sb.from('world').update({ meta: { ...w.meta, hourly_at: new Date().toISOString(), ...(regs ? { mkt_regs: w.meta?.mkt_regs || new Date().toISOString() } : {}) } }).eq('id', 1);
+  const { data: rl } = await sb.from('golfers').select('id,listed_at,career,pool_season').is('manager_id', null).not('ask', 'is', null).eq('retired', false).order('listed_at');
+  const have = rl || [], drop = firstRegs ? have : have.slice(0, Math.max(s.market_new, have.length - s.market_size + s.market_new));
+  if (drop.length && !regs) await sb.from('golfers').update({ ask: null, listed_at: null, retired: true }).in('id', drop.map((g: any) => g.id));
+  else if (drop.length) {
+    // regulars go back to just playing; made-up faces that never played an event leave the game as before
+    const ids = drop.map((g: any) => g.id), { data: played } = await sb.from('event_players').select('golfer_id').in('golfer_id', ids);
+    const p = new Set((played || []).map((x: any) => x.golfer_id)), gone = ids.filter((id: string) => !p.has(id)), back = ids.filter((id: string) => p.has(id));
+    if (gone.length) await sb.from('golfers').update({ ask: null, listed_at: null, retired: true }).in('id', gone);
+    if (back.length) await sb.from('golfers').update({ ask: null, listed_at: null }).in('id', back);
+  }
   const want = Math.max(0, s.market_size - (have.length - drop.length));
-  if (want) {
+  let added = 0;
+  if (want && regs) {
+    const byTour = new Map<string, any[]>();
+    for (let i = 0; i < want * 3 && added < want; i++) {
+      const tour = E.pick(MARKET_TOURS);
+      if (!byTour.has(tour)) byTour.set(tour, await regularsOn(tour, w.season));
+      const g = byTour.get(tour)!.pop(); if (!g) continue;
+      const rec = await recordFor(g, w.season), ask = Math.round(valueOf(g.sk, g.yr) * (0.85 + Math.random() * 0.45) / 500) * 500;
+      await sb.from('golfers').update({ ask, listed_at: new Date(Date.now() + added).toISOString(), ...rec }).eq('id', g.id);
+      const { data: sec } = await sb.from('golfer_secrets').select('ce').eq('golfer_id', g.id).maybeSingle();
+      const room = sec?.ce ? Object.keys(g.sk).reduce((a, k) => a + (sec.ce[k] - g.sk[k]), 0) / Object.keys(g.sk).length : 0;
+      if (!sec) await sb.from('golfer_secrets').insert({ golfer_id: g.id, ce: regularCeiling(g.sk, g.yr), peak: 1, agg: 0 });
+      else if (room < 1) await sb.from('golfer_secrets').update({ ce: regularCeiling(g.sk, g.yr) }).eq('golfer_id', g.id);
+      added++;
+    }
+  } else if (want) {
     const rows: any[] = [], sx: any[] = [];
     for (let i = 0; i < want; i++) {
       const [tour, yr, mu] = E.pick(MARKET_KINDS), m = marketProspect(tour, yr, mu + Math.round(E.gauss() * 2), s.market_prodigy_pct);
@@ -602,13 +662,13 @@ async function hourly(s: any, done: string[]) {
       rows.push(golferRow({ ...m, arch: m.p.arch, sk: m.p.sk }, { stable: E.pick(RIVALS), career: true, ask, listed_at: new Date().toISOString(), color: Math.floor(Math.random() * 6) }));
       sx.push({ ce: m.p.ce, peak: m.p.peak, agg: m.p.agg });
     }
-    await insertGolfers(rows, sx);
+    await insertGolfers(rows, sx); added = want;
   }
   // computer coaches: keep the staff at full strength
   const { count: nc } = await sb.from('golfers').select('id', { count: 'exact', head: true }).eq('retired', true).not('cr', 'is', null).is('manager_id', null);
   const add = Math.max(0, s.ai_coaches - (nc || 0));
   if (add) { const cs = Array.from({ length: add }, () => aiCoachRow(Math.floor(Math.random() * 1e9), s.lessons_per_day)); await insertGolfers(cs.map((c) => c.row), cs.map((c) => c.sec)); }
-  done.push(`market: ${drop.length} out, ${want} in${add ? `; ${add} new coaches` : ''}`);
+  done.push(`market: ${drop.length} out, ${added} in${regs ? ' (tour regulars)' : ''}${add ? `; ${add} new coaches` : ''}`);
 }
 
 // ---------- the daily refresh ----------
