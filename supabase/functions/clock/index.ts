@@ -83,6 +83,29 @@ async function fixedPools(season: number, tours: string[]) {
   }
   await insertGolfers(rows, secs);
 }
+// The Junior and Collegiate regulars are classes that move on together, like the managers' golfers:
+// each class ages a year and improves, the best junior seniors go to college as freshmen,
+// college seniors graduate (they stay in past results but stop playing), and a new class of 15-year-olds arrives.
+const BOT_CLASS = 30;
+async function advanceBots(season: number, next: number) {
+  const get = async (tour: string) => ((await sb.from('golfers').select('id,sk,yr').eq('tour', tour).eq('career', false).eq('retired', false).is('manager_id', null).eq('pool_season', season)).data || []) as any[];
+  const jr = await get('jr'), col = await get('col0');
+  const grow = (sk: any, d: number) => { const o: any = {}; for (const k in sk) o[k] = Math.round(E.clamp(sk[k] + d, 5, 99)); return o; };
+  const ups: { id: string; upd: any }[] = [];
+  for (const yr of [4, 5, 6]) for (const g of shuffle(col.filter((g) => g.yr === yr)).slice(0, BOT_CLASS)) ups.push({ id: g.id, upd: { yr: yr + 1, sk: grow(g.sk, 3.5), pool_season: next } });
+  for (const yr of [1, 2]) for (const g of jr.filter((g) => g.yr === yr)) ups.push({ id: g.id, upd: { yr: yr + 1, sk: grow(g.sk, 2.5), pool_season: next } });
+  const seniors = jr.filter((g) => g.yr === 3).sort((a, b) => E.ovr(b.sk) - E.ovr(a.sk)).slice(0, BOT_CLASS);
+  for (const g of seniors) ups.push({ id: g.id, upd: { tour: 'col0', yr: 4, sk: grow(g.sk, 5), pool_season: next, college: E.COLLEGES[Math.floor(Math.random() * E.COLLEGES.length)] } });
+  for (let i = 0; i < ups.length; i += 25) await Promise.all(ups.slice(i, i + 25).map((u) => sb.from('golfers').update(u.upd).eq('id', u.id)));
+  // the new freshman class on the Junior Tour
+  const rows: any[] = [], secs: any[] = [];
+  E.pool('col0', 'J' + next).filter((_: any, i: number) => i % 3 === 0).forEach((a: any) => {
+    const sk: any = {}; for (const k in a.sk) sk[k] = Math.round(E.clamp(a.sk[k] - (a.yr - 1) * 3.5 - 10, 25, 99));
+    rows.push(golferRow({ ...a, college: null, sk, tour: 'jr', yr: 1 }, { stable: null, career: false, pool_season: next, fatigue: 0, sessions: 0 }));
+    secs.push({ ce: sk, peak: a.peak, agg: a.agg });
+  });
+  await insertGolfers(rows, secs);
+}
 async function ensureWorld(s: any, done: string[]) {
   const { data: w } = await sb.from('world').select('*').maybeSingle();
   if (w) return w;
@@ -720,7 +743,7 @@ async function rollover(w: any, s: any, done: string[]) {
   for (const m of moves) await sb.from('golfers').update(m.upd).eq('id', m.id);
   const next = season + 1, d0 = new Date(Date.parse(w.season_end + 'T12:00:00Z') + 864e5);
   const start = d0.toISOString().slice(0, 10), end = weekEnd(start);
-  await fixedPools(next, ['jr', 'col0']);
+  await advanceBots(season, next);
   await sb.from('world').update({ season: next, season_start: start, season_end: end }).eq('id', 1);
   await scheduleSeason(s, next, start, end);
   for (const mid in news) await addNews(mid, news[mid]);
