@@ -382,3 +382,20 @@ small.age{display:inline-block;margin-left:6px;font-size:.72em;font-weight:500;o
 .mpyou{margin:0;font-size:1.05rem}
 .mpcard td.mst small{display:block;font-size:.62rem;font-weight:600;line-height:1;text-transform:uppercase}
 .mpeye{margin:0 0 -6px}
+/* ---- online: Quick-Fire and Match Play side by side on the Events page ---- */
+.qhead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.qhead .eyebrow{margin:0}
+.qtbl{width:100%;border-collapse:collapse;font-size:.9rem}
+.qtbl th,.qtbl td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+.qtbl thead th{font-family:var(--display);text-transform:uppercase;letter-spacing:.04em;font-size:.85rem;vertical-align:bottom}
+.qtbl thead th small{display:block;font-family:var(--body,inherit);text-transform:none;letter-spacing:0;font-weight:400;color:var(--muted);font-size:.72rem;line-height:1.25}
+.qtbl tbody th{font-weight:600;white-space:nowrap;padding-right:8px}
+.qtbl td{white-space:nowrap}
+.qtbl td .btn{margin:1px 4px 1px 0}
+.qtbl tbody tr:last-child th,.qtbl tbody tr:last-child td{border-bottom:0}
+.btn.qlive i{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--bad,#c0392b);margin-right:5px;vertical-align:1px;animation:qpulse 1.6s infinite}
+.btn.qlive.mine{border-color:var(--pa,#e0ad12);box-shadow:inset 0 0 0 1px var(--pa,#e0ad12)}
+@keyframes qpulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.btn.qlive i{animation:none}}
+.qhow summary{cursor:pointer;font-weight:600;margin-top:4px}
+.qhow p{margin:.5em 0}

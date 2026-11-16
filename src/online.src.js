@@ -177,12 +177,11 @@ events(){
   const tours=[...new Set(D.events.map(e=>isQ(e)?QF:isM(e)?MP:e.tour))].sort((a,b)=>TORDER_ON.indexOf(a)-TORDER_ON.indexOf(b));
   const t=ui.tour||'all',list=D.events.filter(e=>t==='all'||(t===QF?isQ(e):t===MP?isM(e):e.tour===t));
   const qn=D.events.filter(e=>isQ(e)&&phase(e)==='open')[0],qset=qn?D.events.filter(e=>isQ(e)&&e.starts_at===qn.starts_at).sort((a,b)=>['jr','col','p3','p2','p1','c2','c1'].indexOf(a.tour.slice(3))-['jr','col','p3','p2','p1','c2','c1'].indexOf(b.tour.slice(3))):[];
-  const live=list.filter(e=>['live','closed'].includes(phase(e))&&e.status!=='final'),next=list.filter(e=>phase(e)==='open'&&!isQ(e)&&!isM(e)).slice(0,12),done=list.filter(e=>e.status==='final').reverse().slice(0,12);
+  const quick=e=>t==='all'&&(isQ(e)||isM(e)),live=list.filter(e=>['live','closed'].includes(phase(e))&&e.status!=='final'&&!quick(e)),next=list.filter(e=>phase(e)==='open'&&!isQ(e)&&!isM(e)).slice(0,12),done=list.filter(e=>e.status==='final'&&!quick(e)).reverse().slice(0,12);
   const row=e=>`<div class="item"><b>${esc(e.name)}${e.test?' <span class="tag">Test</span>':''}</b><span>${T(e.tour).name}. ${COURSES[e.ci].name}. ${when(e.starts_at)}. Purse ${fmt$(e.purse)}${e.fee?`, entry ${fmt$(e.fee)}`:''}.</span><span>${mineIn(e)}</span><button class="btn sm" data-act="board" data-v="${e.id}">${e.status==='final'?'Results':phase(e)==='open'?'Field':'Watch'}</button></div>`;
   return `<section class="intro"><p class="eyebrow">Season ${D.world?D.world.season:1}${D.world?`, through ${new Date(D.world.season_end+'T12:00:00Z').toLocaleDateString('en-US',{month:'long',day:'numeric'})}`:''}</p><h1>Events</h1><p class="lede">Every event starts on the clock and takes about ${Math.round(4*S().round_min)} minutes: four rounds, one hole every ${Math.round(S().round_min*60/18)} seconds. Everyone watches the same holes at the same time.</p></section>
 <section class="sec"><div class="row" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn sm${t==='all'?' on':''}" data-act="tour" data-v="all">All tours</button>${tours.map(x=>`<button class="btn sm${t===x?' on':''}" data-act="tour" data-v="${x}">${T(x).name}</button>`).join('')}</div></section>
-${qn&&(t==='all'||t===QF)?`<section class="sec qfban"><p class="eyebrow">Every ${S().qf_every_min} minutes, all day</p><h2>Quick-Fire Open</h2><p>Two rounds, no cut, about ${Math.round(2*rmin(qn))} minutes. ${fmt$(S().qf_fee)} to enter; each level's pot is scaled like the main tours (${fmt$(qfBase('col'))} for college) and grows ${fmt$(S().qf_add)} with every entry. The top third of the field get paid. ${fmt$(S().qf_bonus)} each for most greens hit, most up and downs (on the green from 40 yards or closer, then one putt) and the long drive, and ${fmt$(S().qf_ace)} for a hole in one. Only managers\u2019 golfers can win the bonuses, not the tour regulars. It doesn't tire your golfers.</p><p><b>Next ones ${when(qn.starts_at)}. Entries close in ${until(new Date(deadline(qn)).toISOString())}.</b> One event for each level, so every golfer plays his own peers.</p><div class="shop">${qset.map(e=>{const n=mine().filter(g=>canPlay(e,g)).length;return `<div class="item"><b>${lvName(e.tour.slice(3))}</b><span>Pot from ${fmt$(qfBase(e.tour.slice(3)))}. ${n?`${n} of your golfers can play.`:'None of your golfers play at this level.'}</span><button class="btn sm${n?' primary':''}" data-act="board" data-v="${e.id}">${n?'Enter golfers':'See the field'}</button></div>`;}).join('')}</div></section>`:''}
-${mpBanner(t)}
+${quickBoard(t)}
 ${live.length?`<section class="sec"><h2>On the course now</h2><div class="shop">${live.map(row).join('')}</div></section>`:''}
 <section class="sec"><h2>Coming up</h2>${next.length?`<div class="shop">${next.map(row).join('')}</div>`:'<p class="muted">Nothing scheduled.</p>'}</section>
 ${done.length?`<section class="sec"><h2>Finished</h2><div class="shop">${done.map(row).join('')}</div></section>`:''}`;},
@@ -510,10 +509,30 @@ function coachBoard(g){const cur=g.coach_id&&D.coaches.find(x=>x.id===g.coach_id
  <details class="cpick"${cur?'':' open'}><summary>${cur?'Change coach':'Choose a coach'} (${list.filter(c=>c.cr.left>0).length} available today)</summary>
  <div class="cgrid"><div class="ccard${cur?'':' on'}"><div class="chead"><b>Work alone</b></div><p class="muted small">No lessons, no fee.</p><div class="cfoot"><span>Free</span>${cur?'<button class="btn sm" data-act="coachpick" data-v="">Work alone</button>':'<span class="tag hot">Current</span>'}</div></div>${list.map(card).join('')}</div></details></section>`;}
 /* ---------- Match Play: the bracket ---------- */
-function mpBanner(t){if(!(t==='all'||t===MP))return '';const qn=D.events.filter(e=>isM(e)&&phase(e)==='open')[0];if(!qn)return '';
-  const L=['jr','col','p3','p2','p1','c2','c1'],set=D.events.filter(e=>isM(e)&&e.starts_at===qn.starts_at).sort((a,b)=>L.indexOf(a.tour.slice(3))-L.indexOf(b.tour.slice(3)));
-  return `<section class="sec qfban mpban"><p class="eyebrow">Every ${S().qf_every_min} minutes, alongside the Quick-Fire Opens</p><h2>Match Play</h2><p>Head to head, nine holes a match, knockout until one golfer is left; a tie after nine goes to sudden death. Only managers' golfers play, and it only goes ahead if at least two rosters enter. ${fmt$(S().mp_fee)} to enter (${fmt$(S().mp_fee_jr)} for juniors). The pot is a guaranteed amount plus every entry fee, and most of it goes to the deep runs.</p>
- <p><b>Next ones ${when(qn.starts_at)}. Entries close in ${until(new Date(deadline(qn)).toISOString())}.</b></p><div class="shop">${set.map(e=>{const n=mine().filter(g=>canPlay(e,g)).length;return `<div class="item"><b>${lvName(e.tour.slice(3))}</b><span>Guaranteed ${fmt$(mpBase(e.tour.slice(3)))} + entries. ${n?`${n} of your golfers can play.`:'None of your golfers play at this level.'}</span><button class="btn sm${n?' primary':''}" data-act="board" data-v="${e.id}">${n?'Enter golfers':'See entries'}</button></div>`;}).join('')}</div></section>`;}
+// Quick-Fire and Match Play side by side: one row per level, with the next event to enter and the one playing now
+function quickBoard(t){const showQ=t==='all'||t===QF,showM=t==='all'||t===MP;if(!showQ&&!showM)return '';
+  const L=['jr','col','p3','p2','p1','c2','c1'],kinds=[showQ&&{k:'q',is:isQ,name:'Quick-Fire'},showM&&{k:'m',is:isM,name:'Match Play'}].filter(Boolean);
+  const nextOf=K=>{const q=D.events.filter(e=>K.is(e)&&phase(e)==='open')[0];return q?D.events.filter(e=>K.is(e)&&e.starts_at===q.starts_at):[];};
+  const nowOf=K=>D.events.filter(e=>K.is(e)&&e.status!=='final'&&['live','closed'].includes(phase(e)));
+  kinds.forEach(K=>{K.next=nextOf(K);K.now=nowOf(K);});if(!kinds.some(K=>K.next.length||K.now.length))return '';
+  const lvs=L.filter(lv=>kinds.some(K=>K.next.concat(K.now).some(e=>e.tour.slice(3)===lv)));
+  const short=lv=>lvName(lv).replace(/ Tour$/,'');
+  const cell=(K,lv)=>{const nx=K.next.find(e=>e.tour.slice(3)===lv),lv2=K.now.filter(e=>e.tour.slice(3)===lv).pop();
+    let h='';if(nx){const can=mine().filter(g=>canPlay(nx,g)),inn=can.filter(g=>{const x=entryOf(nx,g);return x&&x.status==='in';}).length;
+      h+=`<button class="btn xs${can.length&&!inn?' primary':''}${inn?' on':''}" data-act="board" data-v="${nx.id}" title="${esc(lvName(lv))} ${K.name}, ${when(nx.starts_at)}">${inn?`In: ${inn}`:can.length?'Enter':'Field'}</button>`;}
+    if(lv2){const mineN=mine().filter(g=>{const x=entryOf(lv2,g);return x&&x.status==='in';}).length;
+      h+=`<button class="btn xs qlive${mineN?' mine':''}" data-act="board" data-v="${lv2.id}" title="Playing now"><i></i>${phase(lv2)==='closed'?'Soon':'Live'}</button>`;}
+    return `<td>${h||'<span class="muted">–</span>'}</td>`;};
+  const head=K=>{const nx=K.next[0];return `<th>${K.name}<small>${nx?`Next ${when(nx.starts_at).replace(' ET','')}, closes in ${until(new Date(deadline(nx)).toISOString())}`:'None open'}</small></th>`;};
+  return `<section class="sec qfban qboard"><div class="qhead"><h2>Quick events</h2><p class="eyebrow">Every ${S().qf_every_min} minutes, all day</p></div>
+ <div class="scroll"><table class="qtbl"><thead><tr><th>Level</th>${kinds.map(head).join('')}</tr></thead><tbody>
+ ${lvs.map(lv=>`<tr><th scope="row">${esc(short(lv))}</th>${kinds.map(K=>cell(K,lv)).join('')}</tr>`).join('')}
+ </tbody></table></div>
+ <p class="muted small">Enter takes you to the next one at that level; Live opens the one being played now (gold when one of yours is in it).</p>
+ <details class="qhow"><summary>How they work</summary>
+ ${showQ?`<p><b>Quick-Fire Open.</b> Two rounds, no cut, about ${Math.round(2*S().round_min)} minutes. ${fmt$(S().qf_fee)} to enter; each level's pot is scaled like the main tours (${fmt$(qfBase('col'))} for college) and grows ${fmt$(S().qf_add)} with every entry. The top third of the field get paid. ${fmt$(S().qf_bonus)} each for most greens hit, most up and downs (on the green from 40 yards or closer, then one putt) and the long drive, and ${fmt$(S().qf_ace)} for a hole in one. Only managers’ golfers can win the bonuses. It doesn't tire your golfers.</p>`:''}
+ ${showM?`<p><b>Match Play.</b> Head to head, nine holes a match, knockout until one golfer is left; a tie after nine goes to sudden death, and the beaten semifinalists play for third. Only managers' golfers play, and it only goes ahead if at least two rosters enter. ${fmt$(S().mp_fee)} to enter (${fmt$(S().mp_fee_jr)} for juniors). The pot is a guaranteed amount (${fmt$(mpBase('col'))} for college) plus every entry fee, and most of it goes to the deep runs.</p>`:''}
+ </details></section>`;}
 // The prize plan for a bracket of n golfers: who gets what share of the pot.
 const MPC=['#f2c230','#5b8cff']; // top golfer gold, bottom golfer blue: tracers, balls, scorecard and bracket dots
 function mpPlan(n){n=Math.max(2,n);let R=0;while((1<<R)<n)R++;
