@@ -62,20 +62,23 @@ async function act(action,args,after){
 const EVCOLS='id,tour,season,week,name,ci,type,purse,fee,pm,starts_at,status,rounds_done,field,test,round_min,rounds';
 async function load(){
   const uid=D.user.id;
-  const [me,gs,ev,en,w,st,co,mk,qk]=await Promise.all([
+  const [me,gs,ev,en,w,st,co,mk,qk,qe]=await Promise.all([
     SB.from('managers').select('*').eq('id',uid).maybeSingle(),
     SB.from('golfers').select('*').eq('manager_id',uid).order('created_at'),
     // tour events from the last three days, and the quick events (Quick-Fire, Match Play) only from the last six hours:
     // there are dozens of those an hour, and one shared list would crowd the Finales out
     SB.from('events').select(EVCOLS).gte('starts_at',new Date(Date.now()-3*864e5).toISOString()).not('tour','like','qf:%').not('tour','like','mp:%').order('starts_at').limit(400),
-    SB.from('entries').select('*').eq('manager_id',uid),
+    // only entries for the events loaded below: a busy manager has thousands of old Quick-Fire entries,
+    // and the server returns at most 1,000 rows, so loading them all used to drop the newest ones
+    SB.from('entries').select('*,events!inner(starts_at,tour)').eq('manager_id',uid).gte('events.starts_at',new Date(Date.now()-3*864e5).toISOString()).not('events.tour','like','qf:%').not('events.tour','like','mp:%'),
     SB.from('world').select('*').maybeSingle(),
     SB.from('settings').select('key,value'),
     SB.from('golfers').select('id,name,country,manager_id,stable,cr,best,tour,stats,trophies,ret_age,color').eq('retired',true).not('cr','is',null),
     SB.from('golfers').select('id,name,country,manager_id,stable,sk,yr,tour,college,ask,arch,stats,listed_at,color').not('ask','is',null).eq('retired',false).order('ask'),
     SB.from('events').select(EVCOLS).gte('starts_at',new Date(Date.now()-6*36e5).toISOString()).or('tour.like.qf:*,tour.like.mp:*').order('starts_at').limit(400),
+    SB.from('entries').select('*,events!inner(starts_at,tour)').eq('manager_id',uid).gte('events.starts_at',new Date(Date.now()-6*36e5).toISOString()).or('tour.like.qf:*,tour.like.mp:*',{referencedTable:'events'}),
   ]);
-  D.me=me.data;D.golfers=gs.data||[];D.events=(ev.data||[]).concat(qk.data||[]).filter(e=>e.tour!=='col1'&&e.tour!=='col2').sort((a,b)=>a.starts_at<b.starts_at?-1:a.starts_at>b.starts_at?1:0);/* the old college circuits are gone */D.entries=en.data||[];D.world=w.data;D.coaches=co.data||[];D.market=mk.data||[];
+  D.me=me.data;D.golfers=gs.data||[];D.events=(ev.data||[]).concat(qk.data||[]).filter(e=>e.tour!=='col1'&&e.tour!=='col2').sort((a,b)=>a.starts_at<b.starts_at?-1:a.starts_at>b.starts_at?1:0);/* the old college circuits are gone */D.entries=(en.data||[]).concat(qe.data||[]);if(en.error||qe.error){const f=await SB.from('entries').select('*').eq('manager_id',uid).order('created_at',{ascending:false}).limit(1000);D.entries=f.data||D.entries;}D.world=w.data;D.coaches=co.data||[];D.market=mk.data||[];
   D.settings={...DEFAULTS};(st.data||[]).forEach(r=>D.settings[r.key]=r.value);
   if(!D.me)ui.view='join';else if(ui.view==='join'||ui.view==='loading')ui.view=mine().length?'stable':'scout';
 }
