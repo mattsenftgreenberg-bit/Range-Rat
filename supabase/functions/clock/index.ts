@@ -832,12 +832,15 @@ async function rollover(w: any, s: any, done: string[]) {
   for (const b of botMoves) { cnt[b.from]--; if (!b.retire) cnt[b.next] = (cnt[b.next] || 0) + 1; }
   const TARGET = E.FIELD, sum = (ts: string[]) => ts.reduce((a, t) => a + (cnt[t] || 0), 0);
   // only as many graduating college regulars turn pro as the pro tours have room for; the rest give up the game
-  let over = sum(['p1', 'p2', 'p3']) - 3 * TARGET;
+  // (the pro tours carry a few extra, so enough reach 50 each season to keep the senior tours full)
+  let over = sum(['p1', 'p2', 'p3']) - Math.round(2 * TARGET / 10 * 16);
   for (const b of botMoves.filter((b) => E.isCol(b.from) && !b.retire).sort((a, b) => b.rank - a.rank)) { if (over <= 0) break; cnt[b.next]--; b.retire = true; b.quit = true; over--; }
   for (const [hi, lo] of [['p1', 'p2'], ['p2', 'p3'], ['c1', 'c2']]) {
     const c = botMoves.filter((b) => b.from === lo && b.next === lo && !b.retire).sort((a, b) => a.rank - b.rank);
     for (const b of c) { if ((cnt[hi] || 0) >= TARGET) break; b.next = hi; cnt[hi] = (cnt[hi] || 0) + 1; cnt[lo]--; }
   }
+  // and if the Champions Tour has more than it needs while the Senior Qualifying Tour is short, its lowest finishers drop down
+  for (const b of botMoves.filter((b) => b.from === 'c1' && b.next === 'c1' && !b.retire).sort((a, b) => b.rank - a.rank)) { if ((cnt.c1 || 0) <= TARGET || (cnt.c2 || 0) >= TARGET) break; b.next = 'c2'; cnt.c1--; cnt.c2 = (cnt.c2 || 0) + 1; }
   for (const b of botMoves) {
     const g = b.g, y = g.yr, upd: any = { s_pts: 0 };
     if (b.retire) Object.assign(upd, { retired: true, ret_age: ageOf(y), ask: null, listed_at: null });
