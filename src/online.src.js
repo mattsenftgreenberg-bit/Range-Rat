@@ -278,7 +278,12 @@ function boardHTML(b,e){const rows=boardRows(b,e),fin=e.status==='final',cutDone
  <tr class="sep"><td colspan="${NC}">${full?'Full field':'Leaders'}</td></tr></tbody></table>
  <div class="${full?'bscroll':''}" id="bscroll"><table>${fin?COLG:COLG10}<tbody>${show.map(r=>row(r,rows.indexOf(r)===lastIn)).join('')}</tbody></table></div>
  <div class="row"><span class="muted small">${live?'Updates every few seconds.':proj!==null?'':''}${proj!==null?' Dashed line: the projected cut. Top '+CUT+' and ties play the weekend.':''}</span><button class="btn sm" data-act="fullBoard">${full?'Show top 10':'Show all '+rows.length}</button></div></section>`;}
-function boxHTML(b,e){return (isQ(e)&&e.status!=='final'?qfLiveHTML(b,e):'')+boardHTML(b,e);}
+function boxHTML(b,e){return (isQ(e)&&e.status!=='final'?qfLiveHTML(b,e):'')+(!isQ(e)?aceWatchHTML(tourAces(b),S().ace_bonus):'')+boardHTML(b,e);}
+// Ace watch: every hole in one so far, gold when there's one; a new one flashes the first time it appears
+function tourAces(b){const out=[];(b.players||[]).forEach(p=>(p.scores||[]).forEach((rd,ri)=>rd.forEach((s,h)=>{if(s===1)out.push({p,key:p.id+':'+ri+':'+h,where:`R${ri+1} #${h+1}`});})));return out;}
+function aceCard(aces,bonus,title){ui.aceSeen=ui.aceSeen||new Set();const fresh=aces.some(a=>!ui.aceSeen.has(a.key));aces.forEach(a=>ui.aceSeen.add(a.key));
+  return `<div class="qfcard acecard${aces.length?' hot':''}${fresh&&ui.aceInit?' flash':''}"><h3>${title||'Ace watch'}</h3><p class="small${aces.length?'':' muted'}">${bonus>0?`${fmt$(bonus)} for each hole in one by a manager's golfer`:'Holes in one'}</p><ol>${aces.length?aces.map(a=>`<li class="${a.p.mine?'me':''}">${flagHTML(a.p.country)}${esc(a.p.name)}${a.p.managed?` <small>(${esc(a.p.stable||'')})</small>`:''}<b>${a.where}</b></li>`).join(''):'<li class="muted">None yet</li>'}</ol></div>`;}
+function aceWatchHTML(aces,bonus){const h=`<section class="qflive acewatch">${aceCard(aces,bonus)}</section>`;ui.aceInit=true;return h;}
 /* Quick-Fire: the bonus races so far (only holes already played) */
 function qfLiveHTML(b,e){const P=b.players.filter(p=>p.managed),L=p=>p.live||{},aces=[];
   P.forEach(p=>(p.scores||[]).forEach((rd,ri)=>rd.forEach((s,h)=>{if(s===1)aces.push({p,ri,h});})));
@@ -287,7 +292,7 @@ function qfLiveHTML(b,e){const P=b.players.filter(p=>p.managed),L=p=>p.live||{},
   return `<section class="qflive"><div class="qfcard"><h3>Long drive</h3><p class="muted small">${fmt$(S().qf_bonus)} bonus</p><ol>${dr||'<li class="muted">No drives yet from managers\u2019 golfers</li>'}</ol></div>
  <div class="qfcard"><h3>Greens hit</h3><p class="muted small">${fmt$(S().qf_bonus)} bonus for the most</p><ol>${gi||'<li class="muted">No greens yet from managers\u2019 golfers</li>'}</ol></div>
  <div class="qfcard"><h3>Up and downs</h3><p class="muted small">${fmt$(S().qf_bonus)} bonus for the most</p><ol>${ud||'<li class="muted">None yet</li>'}</ol></div>
- <div class="qfcard${aces.length?' hot':''}"><h3>Holes in one</h3><p class="muted small">${fmt$(S().qf_ace)} each</p><ol>${aces.length?aces.map(a=>`<li class="${a.p.mine?'me':a.p.managed?'mine':''}">${flagHTML(a.p.country)}${esc(a.p.name)}<b>R${a.ri+1} #${a.h+1}</b></li>`).join(''):'<li class="muted">None yet</li>'}</ol></div></section>`;}
+ ${(()=>{const c=aceCard(aces.map(a=>({p:a.p,key:a.p.id+':'+a.ri+':'+a.h,where:`R${a.ri+1} #${a.h+1}`})),S().qf_ace,'Holes in one');ui.aceInit=true;return c;})()}</section>`;}
 /* the last minutes before the first tee shot */
 function teeHTML(e,b){const P=b&&b.players||[],mineP=P.filter(p=>p.mine),fav=P.slice().sort((a,c)=>(c.odds0||0)-(a.odds0||0)).slice(0,5);
   const li=p=>`<li class="${p.mine?'me':p.managed?'mine':''}">${flagHTML(p.country)}${esc(p.name)}${p.managed?` <span class="muted small">${esc(p.stable||'')}</span>`:''}<b>${p.odds0?oddsLabel(p.odds0):''}</b></li>`;
@@ -581,10 +586,13 @@ function mpView(e){const b=ui.mpb&&ui.mpb.event&&ui.mpb.event.id===e.id?ui.mpb:n
 // a live match with one of your golfers in it, to open on arrival
 function mpMineLive(b){const P=b.players||{};for(let r=b.rounds.length-1;r>=0;r--){const R=b.rounds[r],all=R.m.map((x,i)=>[x,`${r}:${i}`]).concat(R.third?[[R.third,`${r}:t`]]:[]);
   for(const [x,k] of all)if(x.a&&x.b&&!x.over&&((P[x.a]||{}).mine||(P[x.b]||{}).mine))return k;}return null;}
+// holes in one so far in a Match Play bracket (only holes already played)
+function mpAces(b){const P=b.players||{},out=[];(b.rounds||[]).forEach((Rd,r)=>Rd.m.map((x,i)=>[x,i]).concat(Rd.third?[[Rd.third,'t']]:[]).forEach(([x,i])=>(x.h||[]).forEach((hs,h)=>[0,1].forEach(sd=>{const id=sd?x.b:x.a;if(hs[sd]===1&&P[id])out.push({p:{...P[id],id,managed:true},key:`mp:${r}:${i}:${h}:${sd}`,where:`#${h+1}`});}))));return out;}
 function mpTopHTML(b,e){const P=b.players||{},fin=b.event.status==='final',started=Date.now()>=Date.parse(b.event.starts_at);
   if(!started&&!fin)return `<section class="teebox"><p class="eyebrow">The bracket is drawn</p><h2>Tees off in</h2><div class="teeclock" id="teeClock" data-at="${e.starts_at}">${clockTxt(e.starts_at)}</div><p class="muted">${Object.keys(P).length} golfers. Pot ${fmt$(b.event.purse)}.</p></section>`;
-  if(fin)return mpResultsHTML(b,e);
-  return `<details class="sec mppaybox"><summary>Prize money: pot ${fmt$(b.event.purse)}, ${Object.keys(P).length} golfers</summary>${mpPlanTable(Object.keys(P).length,b.event.purse)}</details>`;}
+  const ace=aceWatchHTML(mpAces(b),S().ace_bonus);
+  if(fin)return mpResultsHTML(b,e)+ace;
+  return ace+`<details class="sec mppaybox"><summary>Prize money: pot ${fmt$(b.event.purse)}, ${Object.keys(P).length} golfers</summary>${mpPlanTable(Object.keys(P).length,b.event.purse)}</details>`;}
 function mpResultsHTML(b,e){const P=b.players||{},ids=Object.keys(P),tl=e.tour.slice(3)==='col'?'col0':e.tour.slice(3);
   let pl=b.places;if(!pl){pl=Object.keys(b.pay||{}).sort((x,y)=>b.pay[y]-b.pay[x]).map((id,i)=>({id,place:id===b.champ?'1st':i===1?'2nd':'T3',amt:b.pay[id]}));}
   const paid=new Set(pl.map(x=>x.id)),R=b.rounds;
@@ -798,7 +806,7 @@ document.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');i
   if(a==='stour'){ui.tour=v;ui.stand=null;return render();}
   if(a==='payAll'){ui.payAll=!ui.payAll;return render();}
   if(a==='fullBoard'){ui.full=!ui.full;return render();}
-  if(a==='board'){ui.mpb=null;ui.mpw=null;ui.ma=null;ui.mps=null;ui.mpwAuto=0;ui.mpIf=null;ui.view='board';ui.ev=v;ui.board=null;ui.watch=null;ui.full=false;ui.preview=null;render();window.scrollTo(0,0);const e=D.events.find(x=>x.id===v);if(e&&phase(e)==='open')loadPreview(e).then(render);loadBoard().then(render);return;}
+  if(a==='board'){ui.aceInit=false;ui.mpb=null;ui.mpw=null;ui.ma=null;ui.mps=null;ui.mpwAuto=0;ui.mpIf=null;ui.view='board';ui.ev=v;ui.board=null;ui.watch=null;ui.full=false;ui.preview=null;render();window.scrollTo(0,0);const e=D.events.find(x=>x.id===v);if(e&&phase(e)==='open')loadPreview(e).then(render);loadBoard().then(render);return;}
   if(a==='mpWatch'){if(ui.mpw===v)return;ui.mpw=v;ui.ma=null;ui.mps=null;loadMp().then(()=>{render();const w=document.getElementById('mpWatchBox');if(w)w.scrollIntoView({block:'start'});});return;}
   if(a==='mStop'){ui.mpw=null;ui.ma=null;ui.mps=null;return keepScroll(render);}
   if(a==='mPause'&&ui.ma){ui.ma.paused=!ui.ma.paused;return mSide();}
