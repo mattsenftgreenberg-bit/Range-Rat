@@ -161,11 +161,13 @@ const COURSES=COURSE_SPECS.map(c=>{const rng=mulberry32(c.seed);const holes=c.ho
 /* ---- shots ---- */
 const LIE={tee:{c:1,a:1},fairway:{c:.9,a:1},fringe:{c:.9,a:1},green:{c:.9,a:1},rough:{c:.84,a:1.3},sand:{c:.72,a:1.5},trees:{c:.5,a:1.7}};
 const NOEQ={s:0,m:0,l:0},c5=v=>clamp(v,5,99);
+/* A caddy (eq.x, levels 0-3, online only) lifts the mental game on the course: course management, nerve, composure, bounce-back and riding a hot streak. */
+const CADDY=5,mentalOf=(g,k)=>Math.min(99,g.sk[k]+((g.eq&&g.eq.x)||0)*CADDY);
 const driveDist=g=>205+g.sk.pow*.95;
 /* Everything that moves a golfer off his ratings for one hole: form, mood, streaks, time of day, legs, pressure, confidence, equipment. */
 function effective(g,st,ctx){
   const sk=g.sk,eq=g.eq||NOEQ;
-  const adj=st.form+st.mood*10+(st.run>=2?2+sk.momentum*.06:st.run<=-2?-(8-sk.mental*.06):0)+st.timeAdj-(g.fatigue||0)*.07+(ctx.pressure?(sk.clutch-50)/50*6:0)+(g.conf||0);
+  const adj=st.form+st.mood*10+(st.run>=2?2+mentalOf(g,'momentum')*.06:st.run<=-2?-(8-mentalOf(g,'mental')*.06):0)+st.timeAdj-(g.fatigue||0)*.07+(ctx.pressure?(mentalOf(g,'clutch')-50)/50*6:0)+(g.conf||0);
   return{s:adj+eq.s*1.5,m:adj+eq.m*1.5,l:adj+eq.l*1.5,mood:st.mood};
 }
 function swing(g,e,from,target,lie,wind,mc){
@@ -200,9 +202,9 @@ function cost(h,p,risk){
 /* He picks his own target. Intelligence sets how well he reads the options and whether he adapts to the leaderboard;
    a golfer who doesn't think just follows his natural lean toward attacking or playing safe. */
 function chooseTarget(g,e,h,pos,lie,wind,st,ctx){
-  const iq=g.sk.iq,mc=driveDist(g)*LIE[lie].c,d=dist(pos,h.pin);
+  const iq=mentalOf(g,'iq'),mc=driveDist(g)*LIE[lie].c,d=dist(pos,h.pin);
   let risk=Math.exp(-(g.agg||0)*.6*(1-iq/100));
-  if(st.mood<-.4&&g.sk.mental<45)risk*=.6;
+  if(st.mood<-.4&&mentalOf(g,'mental')<45)risk*=.6;
   if(ctx.sit==='chase')risk*=1-.4*iq/100;else if(ctx.sit==='protect')risk*=1+.6*iq/100;
   const n=Math.round(4+iq*.1),noise=(1-iq/100)*.3,c=[];
   if(d<=mc*1.03){c.push(h.pin,lerp(h.pin,h.green,.5),h.green);}
@@ -282,10 +284,10 @@ function playHole(g,st,h,ctx){
   return{score:n,shots,putts,wet,holeOut};
 }
 const timeAdj=(peak,slot)=>[4,-.5,-4.5][Math.abs(peak-slot)];
-const formSd=g=>6-g.sk.mental*.035;
+const formSd=g=>6-mentalOf(g,'mental')*.035;
 function initState(g,slot,carry,weekForm){return{mood:clamp((carry||0)+gauss()*.12,-.6,.6),run:0,form:(weekForm||0)+gauss()*formSd(g)*.8,timeAdj:timeAdj(g.peak,slot),scores:[],total:0,toPar:0};}
 function afterHole(g,st,h,res){
-  const sk=g.sk,d=res.score-h.par,up=.4+sk.momentum*.012,down=1.7-sk.mental*.014,rec=.05+sk.attitude*.004;
+  const sk=g.sk,d=res.score-h.par,up=.4+mentalOf(g,'momentum')*.012,down=1.7-mentalOf(g,'mental')*.014,rec=.05+mentalOf(g,'attitude')*.004;
   let dm=d<=-2?.5:d===-1?.3:d===0?.04:d===1?-.25:d===2?-.45:-.6;
   dm*=dm>0?up:down;dm-=.1*res.wet*down;if(res.holeOut)dm+=.15*up;
   st.mood=clamp(st.mood*(1-rec)+dm,-1,1);
@@ -351,7 +353,7 @@ function rollProspect(mu){
   return{arch:a[0],sk,ce,grade,peak:Math.floor(R()*3),agg:clamp(gauss()*.6,-1,1)};
 }
 /* ---- odds: a quick projection of everyone's finish from ratings, score so far and holes left ---- */
-function ratingFor(g,ci){const sk=g.sk,eq=g.eq||NOEQ;return ovr(sk)*.75+um(sk,FIT[ci])*.25+(g.conf||0)-(g.fatigue||0)*.07+(eq.s+eq.m+eq.l)*.5;}
+function ratingFor(g,ci){const sk=g.sk,eq=g.eq||NOEQ;return ovr(sk)*.75+um(sk,FIT[ci])*.25+(g.conf||0)-(g.fatigue||0)*.07+(eq.s+eq.m+eq.l+(eq.x||0))*.5;}
 const ODDS={k:.0165,v:.52,f:.055};
 function winProbs(list,N){
   const n=list.length,mean=avg(list.map(x=>x.r)),mu=list.map(x=>x.cur-(x.r-mean)*ODDS.k*x.H),sd=list.map(x=>Math.sqrt(ODDS.v*x.H+Math.pow(ODDS.f*x.H,2))),w=new Array(n).fill(0);

@@ -125,9 +125,9 @@ const A: Record<string, (c: any) => Promise<any>> = {
   },
   async gear({ uid, me, b }) {
     const g = await myGolfer(uid, b.id), u = String(b.u);
-    if (!'sml'.includes(u) || u.length !== 1) no('Pick a set of clubs.');
-    const lvl = g.eq[u], c = EQC[lvl]; if (c === undefined) no('Already the best available.');
-    await cash(uid, -c, 'gear', `${g.name}: new clubs`, false);
+    if (!'smlx'.includes(u) || u.length !== 1) no('Pick a set of clubs or a caddy.');
+    const lvl = (g.eq || {})[u] || 0, c = EQC[lvl]; if (c === undefined) no('Already the best available.');
+    await cash(uid, -c, 'gear', `${g.name}: ${u === 'x' ? 'a new caddy' : 'new clubs'}`, false);
     await sb.from('golfers').update({ eq: { ...g.eq, [u]: lvl + 1 } }).eq('id', g.id);
   },
   async shirt({ uid, b }) { const g = await myGolfer(uid, b.id); await sb.from('golfers').update({ color: E.clamp(+b.color || 0, 0, 5) }).eq('id', g.id); },
