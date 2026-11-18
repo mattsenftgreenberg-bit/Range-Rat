@@ -104,7 +104,12 @@ async function load(){
     SB.from('events').select(EVCOLS).gte('starts_at',new Date(Date.now()-6*36e5).toISOString()).or('tour.like.qf:*,tour.like.mp:*').order('starts_at').limit(400),
     SB.from('entries').select('*,events!inner(starts_at,tour)').eq('manager_id',uid).gte('events.starts_at',new Date(Date.now()-6*36e5).toISOString()).or('tour.like.qf:*,tour.like.mp:*',{referencedTable:'events'}),
   ]);
-  D.me=me.data;D.golfers=gs.data||[];D.events=(ev.data||[]).concat(qk.data||[]).filter(e=>e.tour!=='col1'&&e.tour!=='col2').sort((a,b)=>a.starts_at<b.starts_at?-1:a.starts_at>b.starts_at?1:0);/* the old college circuits are gone */D.entries=(en.data||[]).concat(qe.data||[]);if(en.error||qe.error){const f=await SB.from('entries').select('*').eq('manager_id',uid).order('created_at',{ascending:false}).limit(1000);D.entries=f.data||D.entries;}D.world=w.data;D.coaches=co.data||[];D.market=mk.data||[];
+  D.me=me.data;D.golfers=gs.data||[];D.events=(ev.data||[]).concat(qk.data||[]).filter(e=>e.tour!=='col1'&&e.tour!=='col2').sort((a,b)=>a.starts_at<b.starts_at?-1:a.starts_at>b.starts_at?1:0);/* the old college circuits are gone */D.entries=(en.data||[]).concat(qe.data||[]);if(en.error||qe.error){const f=await SB.from('entries').select('*').eq('manager_id',uid).order('created_at',{ascending:false}).limit(1000);D.entries=f.data||D.entries;}
+  // how many golfers other managers have entered in each open Quick-Fire and Match Play, for the Events page
+  D.qIn={};const qOpen=D.events.filter(e=>(isQ(e)||isM(e))&&phase(e)==='open').map(e=>e.id);
+  if(qOpen.length){const {data:qa}=await SB.from('entries').select('event_id,manager_id').in('event_id',qOpen).eq('status','in').neq('manager_id',uid);
+    for(const x of qa||[]){const o=D.qIn[x.event_id]||(D.qIn[x.event_id]={n:0,m:new Set()});o.n++;o.m.add(x.manager_id);}}
+  D.world=w.data;D.coaches=co.data||[];D.market=mk.data||[];
   D.settings={...DEFAULTS};(st.data||[]).forEach(r=>D.settings[r.key]=r.value);
   if(!D.me)ui.view='join';else if(ui.view==='join'||ui.view==='loading')ui.view=mine().length?'stable':'scout';
 }
@@ -548,17 +553,17 @@ function quickBoard(t){const showQ=t==='all'||t===QF,showM=t==='all'||t===MP;if(
   const lvs=L.filter(lv=>kinds.some(K=>K.next.concat(K.now).some(e=>e.tour.slice(3)===lv)));
   const short=lv=>lvName(lv).replace(/ Tour$/,'');
   const cell=(K,lv)=>{const nx=K.next.find(e=>e.tour.slice(3)===lv),lv2=K.now.filter(e=>e.tour.slice(3)===lv).pop();
-    let h='';if(nx){const can=mine().filter(g=>canPlay(nx,g)),inn=can.filter(g=>{const x=entryOf(nx,g);return x&&x.status==='in';}).length;
-      h+=`<button class="btn xs${can.length&&!inn?' primary':''}${inn?' on':''}" data-act="board" data-v="${nx.id}" title="${esc(lvName(lv))} ${K.name}, ${when(nx.starts_at)}">${inn?`In: ${inn}`:can.length?'Enter':'Field'}</button>`;}
+    let h='',tail='';if(nx){const can=mine().filter(g=>canPlay(nx,g)),inn=can.filter(g=>{const x=entryOf(nx,g);return x&&x.status==='in';}).length;
+      h+=`<button class="btn xs${can.length&&!inn?' primary':''}${inn?' on':''}" data-act="board" data-v="${nx.id}" title="${esc(lvName(lv))} ${K.name}, ${when(nx.starts_at)}">${inn?`In: ${inn}`:can.length?'Enter':'Field'}</button>`;const oth=(D.qIn||{})[nx.id];if(oth&&oth.n)tail=`<small class="qin" title="${oth.n} golfer${oth.n>1?'s':''} from ${oth.m.size} other roster${oth.m.size>1?'s':''}">${oth.n} other${oth.n>1?'s':''} in</small>`;}
     if(lv2){const mineN=mine().filter(g=>{const x=entryOf(lv2,g);return x&&x.status==='in';}).length;
       h+=`<button class="btn xs qlive${mineN?' mine':''}" data-act="board" data-v="${lv2.id}" title="Playing now"><i></i>${phase(lv2)==='closed'?'Soon':'Live'}</button>`;}
-    return `<td>${h||'<span class="muted">–</span>'}</td>`;};
+    return `<td>${h||'<span class="muted">–</span>'}${tail}</td>`;};
   const head=K=>{const nx=K.next[0];return `<th>${K.name}<small>${nx?`Next ${when(nx.starts_at).replace(' ET','')}, closes in ${until(new Date(deadline(nx)).toISOString())}`:'None open'}</small></th>`;};
   return `<section class="sec qfban qboard"><div class="qhead"><h2>Quick events</h2><p class="eyebrow">Every ${S().qf_every_min} minutes, all day</p></div>
  <div class="scroll"><table class="qtbl"><thead><tr><th>Level</th>${kinds.map(head).join('')}</tr></thead><tbody>
  ${lvs.map(lv=>`<tr><th scope="row">${esc(short(lv))}</th>${kinds.map(K=>cell(K,lv)).join('')}</tr>`).join('')}
  </tbody></table></div>
- <p class="muted small">Enter takes you to the next one at that level; Live opens the one being played now (gold when one of yours is in it).</p>
+ <p class="muted small">Enter takes you to the next one at that level; Live opens the one being played now (gold when one of yours is in it). "Others in" counts golfers other managers have entered.</p>
  <details class="qhow"><summary>How they work</summary>
  ${showQ?`<p><b>Quick-Fire Open.</b> Two rounds, no cut, about ${Math.round(2*S().round_min)} minutes. ${fmt$(S().qf_fee)} to enter; each level's pot is scaled like the main tours (${fmt$(qfBase('col'))} for college) and grows ${fmt$(S().qf_add)} with every entry. The top third of the field get paid. ${fmt$(S().qf_bonus)} each for most greens hit, most up and downs (on the green from 40 yards or closer, then one putt) and the long drive, and ${fmt$(S().qf_ace)} for a hole in one. Only managers’ golfers can win the bonuses. It doesn't tire your golfers.</p>`:''}
  ${showM?`<p><b>Match Play.</b> Head to head, nine holes a match, knockout until one golfer is left; a tie after nine goes to sudden death, and the beaten semifinalists play for third. Only managers' golfers play, and it only goes ahead if at least two rosters enter. ${fmt$(S().mp_fee)} to enter (${fmt$(S().mp_fee_jr)} for juniors). The pot is a guaranteed amount (${fmt$(mpBase('col'))} for college) plus every entry fee, and most of it goes to the deep runs.</p>`:''}
