@@ -746,10 +746,36 @@ async function dailyRefresh(s: any, done: string[]) {
 }
 
 // ---------- the end of a season ----------
+// Getting older: from 40 a golfer loses a little distance and accuracy off the tee each season, and from 50 a bit of everything else too.
+function ageDecline(sk: any, y: number) {
+  if (y < 18) return;
+  const k = y >= 23 ? 1 : 0.5;
+  sk.pow = Math.max(20, sk.pow - 0.8 * k); sk.lacc = Math.max(20, sk.lacc - 0.3 * k);
+  if (y >= 23) for (const q of ['wedge', 'pitch', 'chip', 'bunker', 'sputt', 'lputt', 'iacc', 'idist']) sk[q] = Math.max(20, sk[q] - 0.3);
+}
+// Computer pros don't train, so they improve a little on their own in their early pro years (22 to 29), then hold steady.
+function naturalGrowth(sk: any, y: number) {
+  const up = y >= Y.pro && y <= Y.pro + 3 ? 1.5 : y >= Y.pro + 4 && y <= Y.pro + 7 ? 0.75 : 0;
+  if (up) for (const k in sk) sk[k] = Math.min(99, Math.round((sk[k] + up) * 10) / 10);
+}
+// Where a tour regular (a pro, senior or graduating college computer golfer) goes at the end of the season.
+// Junior and underclass college regulars move up as classes in advanceBots instead.
+function botMove(g: any, tour: string, rank: number, n: number) {
+  const col = E.isCol(tour);
+  if (tour === 'jr' || (col && g.yr < Y.pro - 1)) return null;
+  const y = g.yr, top = rank <= ZONE, bot = rank > n - ZONE;
+  let next = tour, retire = false;
+  if (col) next = top ? 'p2' : 'p3';
+  else if (y === Y.sen - 1) next = tour === 'p1' || (tour === 'p2' && top) ? 'c1' : 'c2';
+  else if (y >= Y.last) retire = true;
+  else if (top && E.UP[tour]) next = E.UP[tour];
+  else if (bot && E.DOWN[tour]) next = E.DOWN[tour];
+  return { g, from: tour, next, retire, rank };
+}
 async function rollover(w: any, s: any, done: string[]) {
   const season = w.season, news: Record<string, string[]> = {};
   const say = (mid: string, t: string) => (news[mid] ??= []).push(t);
-  const moves: any[] = [];
+  const moves: any[] = [], botMoves: any[] = [], cnt: Record<string, number> = {};
   // one collegiate tour now: fold any old college circuits into it
   await sb.from('standings').update({ tour: 'col0' }).in('tour', ['col1', 'col2']).eq('season', season);
   await sb.from('golfers').update({ tour: 'col0' }).in('tour', ['col1', 'col2']);
@@ -758,14 +784,15 @@ async function rollover(w: any, s: any, done: string[]) {
     const { data: st } = await sb.from('standings').select('golfer_id,pts,wins,earn').eq('tour', tour).eq('season', season);
     const sm = new Map((st || []).map((x: any) => [x.golfer_id, x]));
     const { data: car } = await sb.from('golfers').select('*').eq('tour', tour).eq('retired', false).eq('career', true);
-    let pq = sb.from('golfers').select('id,sk').eq('tour', tour).eq('career', false).eq('retired', false);
+    let pq = sb.from('golfers').select('id,name,sk,yr').eq('tour', tour).eq('career', false).eq('retired', false);
     pq = col ? pq.eq('pool_season', season) : pq.is('pool_season', null);
     const { data: pool } = await pq;
     const all: any[] = [...(car || []), ...(pool || [])].map((g: any) => ({ g, pts: sm.get(g.id)?.pts || 0, wins: sm.get(g.id)?.wins || 0, earn: sm.get(g.id)?.earn || 0 }));
     all.sort((a, b) => b.pts - a.pts || E.ovr(b.g.sk) - E.ovr(a.g.sk));
-    all.forEach((x, i) => (x.rank = i + 1));
+    all.forEach((x, i) => (x.rank = i + 1)); cnt[tour] = (cnt[tour] || 0) + all.length;
     for (const x of all) {
-      const g = x.g; if (!g.career) continue;
+      const g = x.g;
+      if (!g.career) { const bm = botMove(g, tour, x.rank, all.length); if (bm) botMoves.push(bm); continue; }
       const rank = x.rank, y = g.yr, top = rank <= ZONE, bot = rank > all.length - ZONE;
       let next = tour, note = '', retire = false;
       let offers: any = null;
@@ -785,7 +812,7 @@ async function rollover(w: any, s: any, done: string[]) {
       const trophies = g.trophies || [];
       if (rank === 1 && x.pts > 0) trophies.push({ s: season, n: T.name + ' season title', t: tour, title: true });
       const seasons = (g.seasons || []).concat([{ s: y, gs: season, tour, rank, pts: x.pts, wins: x.wins, earn: x.earn + bonus }]);
-      if (!retire && y >= 18) { const k = y >= 23 ? 1 : 0.5; g.sk.pow = Math.max(20, g.sk.pow - 0.8 * k); g.sk.lacc = Math.max(20, g.sk.lacc - 0.3 * k); if (y >= 23) for (const q of ['wedge', 'pitch', 'chip', 'bunker', 'sputt', 'lputt', 'iacc', 'idist']) g.sk[q] = Math.max(20, g.sk[q] - 0.3); }
+      if (!retire) { ageDecline(g.sk, y); if (!g.manager_id) naturalGrowth(g.sk, y); }
       const upd: any = { yr: y + 1, tour: next, seasons, trophies, sk: g.sk, s_pts: 0, conf: 0 };
       if (offers) { if (g.manager_id) Object.assign(upd, { college: null, offers: { list: offers, at: new Date().toISOString() } }); else upd.college = offers[0].college; }
       if (retire) {
@@ -793,19 +820,39 @@ async function rollover(w: any, s: any, done: string[]) {
         const o = coachRatings(g, sec?.co || rawCo(g.id));
         Object.assign(upd, { retired: true, ret_age: ageOf(y), ask: null, coach_id: null, cr: { price: fairPrice(o, fameOf({ ...g, trophies, seasons })), left: s.lessons_per_day, earn: 0, given: 0, own: 0, last: null, o } });
       }
-      moves.push({ id: g.id, upd });
+      moves.push({ id: g.id, upd, from: tour });
       if (g.manager_id) {
         if (bonus) await cash(g.manager_id, bonus, 'bonus', `${g.name}: season bonus, ${T.name}`);
         say(g.manager_id, `${g.name} finished ${rank}${['th', 'st', 'nd', 'rd'][rank % 10 > 3 || [11, 12, 13].includes(rank % 100) ? 0 : rank % 10]} on the ${T.name}. ${note}${bonus ? ` Season bonus: ${fmt$(bonus)}.` : ''}`);
       }
     }
   }
-  for (const m of moves) await sb.from('golfers').update(m.upd).eq('id', m.id);
+  // keep the upper tours full: if retirements and moves would leave one short, the best regulars from the tour below go up too
+  for (const m of moves) { cnt[m.from]--; if (!m.upd.retired) cnt[m.upd.tour] = (cnt[m.upd.tour] || 0) + 1; }
+  for (const b of botMoves) { cnt[b.from]--; if (!b.retire) cnt[b.next] = (cnt[b.next] || 0) + 1; }
+  const TARGET = E.FIELD, sum = (ts: string[]) => ts.reduce((a, t) => a + (cnt[t] || 0), 0);
+  // only as many graduating college regulars turn pro as the pro tours have room for; the rest give up the game
+  let over = sum(['p1', 'p2', 'p3']) - 3 * TARGET;
+  for (const b of botMoves.filter((b) => E.isCol(b.from) && !b.retire).sort((a, b) => b.rank - a.rank)) { if (over <= 0) break; cnt[b.next]--; b.retire = true; b.quit = true; over--; }
+  // if the senior tours would run short, the best of this year's retirees play one more season
+  let short = 2 * TARGET - sum(['c1', 'c2']);
+  for (const b of botMoves.filter((b) => b.retire && !b.quit && b.g.yr < Y.last + 3 && (b.from === 'c1' || b.from === 'c2')).sort((a, b) => a.rank - b.rank)) { if (short <= 0) break; b.retire = false; b.next = b.from; cnt[b.from]++; short--; }
+  for (const [hi, lo] of [['p1', 'p2'], ['p2', 'p3'], ['c1', 'c2']]) {
+    const c = botMoves.filter((b) => b.from === lo && b.next === lo && !b.retire).sort((a, b) => a.rank - b.rank);
+    for (const b of c) { if ((cnt[hi] || 0) >= TARGET) break; b.next = hi; cnt[hi] = (cnt[hi] || 0) + 1; cnt[lo]--; }
+  }
+  for (const b of botMoves) {
+    const g = b.g, y = g.yr, upd: any = { s_pts: 0 };
+    if (b.retire) Object.assign(upd, { retired: true, ret_age: ageOf(y), ask: null, listed_at: null });
+    else { ageDecline(g.sk, y); naturalGrowth(g.sk, y); Object.assign(upd, { yr: y + 1, tour: b.next, sk: g.sk, pool_season: null }); }
+    moves.push({ id: g.id, upd });
+  }
+  for (let i = 0; i < moves.length; i += 25) await Promise.all(moves.slice(i, i + 25).map((m) => sb.from('golfers').update(m.upd).eq('id', m.id)));
   const next = season + 1, d0 = new Date(Date.parse(w.season_end + 'T12:00:00Z') + 864e5);
   const start = d0.toISOString().slice(0, 10), end = weekEnd(start);
   await advanceBots(season, next);
   await sb.from('world').update({ season: next, season_start: start, season_end: end }).eq('id', 1);
   await scheduleSeason(s, next, start, end);
   for (const mid in news) await addNews(mid, news[mid]);
-  done.push(`season ${season} closed; season ${next} scheduled`);
+  done.push(`season ${season} closed; season ${next} scheduled; ${botMoves.length} tour regulars moved on (${botMoves.filter((b) => b.retire).length} retired)`);
 }
