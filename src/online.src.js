@@ -218,7 +218,7 @@ ${own.length?`<section class="sec mine-list"><h2>Your listings</h2><div class="s
  <div class="roster mkt">${list.map(m=>{const val=valueOfC(m.sk,m.yr),d=m.ask/val;return `<div class="rcard"><div class="rtop">${avatarO(m)}<div class="rwho"><b><button class="linkbtn" data-act="player" data-v="${m.id}">${flagHTML(m.country)}${esc(m.name)}</button></b><span>Age ${ageOf(m.yr)} \u00b7 ${isCol(m.tour)?`College ${(classOf(m.yr)||'').toLowerCase()}`:T(m.tour).name}</span><span>${m.manager_id?`Sold by ${esc(m.stable||'a manager')} <span class="tag">Manager</span>`:m.stable?`Sold by ${esc(m.stable)}`:`Unsigned ${isCol(m.tour)&&m.college?esc(m.college)+' player':'tour regular'}`}</span></div><div class="rovr"><b>${Math.round(ovr(m.sk))}</b><span>OVR</span></div></div>
   <div class="rbars">${'smlx'.split('').map(u=>{const v=um(m.sk,u);return `<span class="rl">${UMB[u]}</span><span class="track"><i style="width:${clamp(v,0,100)}%;background:${barC(v)}"></i></span><b>${Math.round(v)}</b>`;}).join('')}</div>
   <div class="mprice"><b>${fmt$(m.ask)}</b><span class="tag${d<.93?' hot':''}">${d<.93?'Under value':d>1.1?'Over value':'Fair price'}</span></div>
-  <div class="row" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn sm" data-act="player" data-v="${m.id}">Scouting report</button><button class="btn sm primary" data-act="buy" data-v="${m.id}" ${full||D.me.cash<m.ask||ui.busy?'disabled':''}>Sign him</button></div></div>`;}).join('')}</div>
+  <div class="row" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn sm" data-act="player" data-v="${m.id}">Scouting report</button>${buyBtn(m,full,'Sign him')}</div></div>`;}).join('')}</div>
 <p class="muted small">${full?`Your roster is full at ${S().max_golfers} active golfers. `:''}Rival coaches buy listed golfers too, so the list changes day to day.</p></section>`;},
 guide:()=>guideHTML(),
 league:()=>leagueHTML(),
@@ -723,6 +723,10 @@ function mDraw(dt){const M=ui.ma,cv=document.getElementById('mcv');if(!cv||!M.h)
     const bx=X(at[0]),by=Y(at[1]);c.fillStyle='rgba(0,0,0,.3)';c.beginPath();c.ellipse(bx+lift*.3,by+u*.12,br,br*.6,0,0,6.3);c.fill();
     c.fillStyle='#fff';c.strokeStyle=MPC[p];c.lineWidth=Math.max(2,u*.22);c.beginPath();c.arc(bx,by-lift,br,0,6.3);c.fill();c.stroke();}
   if(q&&q.sh.holed&&M.phase==='wait'&&M.w<1000){const hw=M.w/1000;c.strokeStyle=MPC[q.p];c.globalAlpha=1-hw;c.lineWidth=Math.max(2,u*.22);c.beginPath();c.arc(px,py,u*(.6+hw*3.2),0,6.3);c.stroke();c.globalAlpha=1;}}
+// Buying takes two taps: "Sign him", then a confirm button with the price on it.
+function buyBtn(m,full,label){const off=full||D.me.cash<m.ask||ui.busy;
+  if(ui.buyAsk===m.id&&!off)return `<span class="buyask"><span>Sign ${esc(m.name)} for <b>${fmt$(m.ask)}</b>?</span><button class="btn sm primary" data-act="buyOk" data-v="${m.id}">Confirm buy</button><button class="btn sm" data-act="buyNo">Cancel</button></span>`;
+  return `<button class="btn sm primary" data-act="buy" data-v="${m.id}" ${off?'disabled':''}>${label}</button>`;}
 /* ---------- the league: every manager's record and roster ---------- */
 async function loadLeague(){const {data}=await SB.rpc('league');ui.league=data||[];if(ui.view==='league'||ui.view==='mgr')render();}
 async function loadMgr(id){ui.mgrG=null;const {data}=await SB.from('golfers').select('*').eq('manager_id',id).order('created_at');ui.mgrG=data||[];if(!ui.league)await loadLeague();ui.mgr=(ui.league||[]).find(m=>m.id===id)||null;if(ui.view==='mgr')render();}
@@ -753,7 +757,7 @@ function playerHTML(){const g=ui.pl;const back=ui.from==='mgr'&&ui.mid?`<button 
   const val=valueOfC(g.sk,g.yr),mineG=g.manager_id===D.user.id,full=mine().length>=S().max_golfers,sa=scoringAvg(g.stats),R=ui.rep;
   const seasons=(g.seasons||[]).slice().reverse();
   return `<section class="intro"><p class="eyebrow">${g.ask&&!mineG?'For sale':'Player file'}</p><div class="who">${avatarO(g)}<div><h1>${flagHTML(g.country)} ${esc(g.name)}</h1><p class="muted">${g.arch?esc(g.arch)+'. ':''}Age ${ageOf(g.yr)}. ${tourOf(g)}. Overall ${Math.round(ovr(g.sk))}. ${esc(g.stable||'Tour regular')}.</p></div></div>${back}</section>
-${g.ask&&!mineG?`<section class="sec"><div class="row" style="justify-content:flex-start;flex-wrap:wrap;gap:12px"><b style="font-size:1.3rem">${fmt$(g.ask)}</b><span class="muted">Market value ${fmt$(val)}. ${g.ask/val<.93?'Priced under value.':g.ask/val>1.1?'Priced over value.':'A fair price.'}</span><button class="btn primary sm" data-act="buy" data-v="${g.id}" ${full||D.me.cash<g.ask||ui.busy?'disabled':''}>Sign him for ${fmt$(g.ask)}</button></div>${flash()}${ui.msg?`<p class="hand">${esc(ui.msg)}</p>`:''}</section>`:''}
+${g.ask&&!mineG?`<section class="sec"><div class="row" style="justify-content:flex-start;flex-wrap:wrap;gap:12px"><b style="font-size:1.3rem">${fmt$(g.ask)}</b><span class="muted">Market value ${fmt$(val)}. ${g.ask/val<.93?'Priced under value.':g.ask/val>1.1?'Priced over value.':'A fair price.'}</span>${buyBtn(g,full,`Sign him for ${fmt$(g.ask)}`)}</div>${flash()}${ui.msg?`<p class="hand">${esc(ui.msg)}</p>`:''}</section>`:''}
 ${R?`<section class="sec"><h2>Scouting report</h2>${reportBody(g,R)}</section>`:''}
 <section class="sec"><h2>Record</h2><div class="stats"><div><b>${sa===null?'–':(sa>=0?'+':'')+sa.toFixed(1)}</b><span>Scoring avg (to par)</span></div><div><b>${(g.stats&&g.stats.rounds)||0}</b><span>Rounds</span></div></div>${careerHTML(g)}
 ${seasons.length?`<h3>Seasons</h3><div class="scroll"><table class="tbl"><thead><tr><th>Season</th><th>Tour</th><th class="num">Rank</th><th class="num">Pts</th><th class="num">Wins</th><th class="num">Earned</th></tr></thead><tbody>${seasons.map(x=>`<tr><td>${x.s} (age ${ageOf(x.s)})</td><td class="small">${T(x.tour).name}</td><td class="num">${x.rank}</td><td class="num">${fmtPts(x.pts)}</td><td class="num">${x.wins||''}</td><td class="num">${fmt$(x.earn)}</td></tr>`).join('')}</tbody></table></div>`:''}</section>
@@ -822,7 +826,9 @@ document.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');i
   if(a==='unlist')return act('unlist',{id:g.id});
   if(a==='unlistid')return act('unlist',{id:v},()=>{ui.msg='Taken off the market.';});
   if(a==='quicksell'){ui.confirm=null;return act('quicksell',{id:g.id},()=>{ui.sel=null;ui.view='stable';});}
-  if(a==='buy')return act('buy',{id:v});
+  if(a==='buy'){ui.buyAsk=v;return keepScroll(render);}
+  if(a==='buyNo'){ui.buyAsk=null;return keepScroll(render);}
+  if(a==='buyOk'){ui.buyAsk=null;return act('buy',{id:v});}
   if(a==='retire'){ui.confirm=null;return act('retire',{id:g.id});}
   if(a==='fee')return act('fee',{id:g.id,price:+val('feeIn')});
   if(a==='rename')return act('rename',{name:val('stName')});
