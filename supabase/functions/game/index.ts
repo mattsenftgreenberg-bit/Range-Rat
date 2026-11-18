@@ -3,6 +3,7 @@
 import {
   sb, E, settings, json, CORS, cash, addNews, fmt$, valueOf, canSell, coachRatings, rawCo, fairPrice, fameOf,
   golferRow, insertGolfers, COLLEGE_TOUR, trainOnce, lesson, EQC, coOvr, DEFAULTS,
+  gradeOf,
 } from '../_shared/common.ts';
 
 class Oops extends Error {}
@@ -49,6 +50,7 @@ async function newScout(uid: string, rerolls: number) {
   // juniors are 15: a few points behind where a college freshman would be
   const p = E.rollProspect();
   for (const k in p.sk) p.sk[k] = Math.max(25, p.sk[k] - 6);
+  for (const u of 'smlx') p.grade[u] = gradeOf(E.um(p.ce, u), Math.random);
   await sb.from('manager_secrets').upsert({ id: uid, prospect: p });
   await sb.from('managers').update({ prospect: scoutView(p), rerolls }).eq('id', uid);
   return scoutView(p);
@@ -269,9 +271,9 @@ const A: Record<string, (c: any) => Promise<any>> = {
     const ce = sec!.ce, r = E.mulberry32(E.hash('report-' + g.id)), out: any = {};
     for (const u of 'smlx') {
       const cv = E.um(ce, u), room = cv - E.um(g.sk, u);
-      let gi = cv >= 86 ? 0 : cv >= 79 ? 1 : 2; if (r() < 0.25) gi = E.clamp(gi + (r() < 0.5 ? -1 : 1), 0, 2);
+      const grade = gradeOf(cv, r);
       let ri = room > 8 ? 0 : room > 3 ? 1 : 2; if (r() < 0.2) ri = E.clamp(ri + (r() < 0.5 ? -1 : 1), 0, 2);
-      out[u] = { grade: 'ABC'[gi], room: ['Plenty of room to grow', 'Some room left', 'Close to his ceiling'][ri] };
+      out[u] = { grade, room: ['Plenty of room to grow', 'Some room left', 'Close to his ceiling'][ri] };
     }
     return { report: out };
   },

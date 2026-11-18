@@ -191,3 +191,11 @@ export function collegeOffers(g: any, rank: number, n: number) {
   return schools.map((college: string, i: number) => ({ college, nil: Math.round(top * [1, 0.82 + Math.random() * 0.1, 0.62 + Math.random() * 0.12][i] / 100) * 100 }))
     .sort((a: any, b: any) => b.nil - a.nil);
 }
+
+// The scouts' ceiling grade for one area, A to F: A 86+, B 79-85, C 72-78, D 65-71, F below 65.
+// A quarter of the time they misread it by one letter.
+export function gradeOf(cv: number, r: () => number) {
+  let gi = cv >= 86 ? 0 : cv >= 79 ? 1 : cv >= 72 ? 2 : cv >= 65 ? 3 : 4;
+  if (r() < 0.25) gi = Math.min(4, Math.max(0, gi + (r() < 0.5 ? -1 : 1)));
+  return 'ABCDF'[gi];
+}
