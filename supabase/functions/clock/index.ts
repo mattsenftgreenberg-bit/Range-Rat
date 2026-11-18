@@ -228,7 +228,8 @@ function holeExtras(res: any, h: any) {
 // the `mpBoard` game action reveals it hole by hole on the clock. Pot = the level's guaranteed amount + every entry fee.
 const isM = (tour: string) => String(tour).startsWith('mp:');
 const mpBase = (s: any, lv: string) => Math.round(s.mp_base * E.TOURS[lv === 'col' ? 'col0' : lv].purse / E.TOURS.col0.purse / 100) * 100;
-const mpFee = (s: any, lv: string) => (lv === 'jr' ? s.mp_fee_jr : s.mp_fee);
+// Match Play entry fees step up by level (Premier the dearest); the pot is the entry fees, plus any guaranteed amount the admin sets.
+const mpFee = (s: any, lv: string) => Number(s['mp_fee_' + lv] ?? 0);
 async function scheduleMatch(s: any, done: string[]) {
   if (!s.mp_on) return;
   const step = s.qf_every_min * 60e3, first = Math.ceil((Date.now() + (s.deadline_min + 1) * 60e3) / step) * step;
@@ -306,7 +307,7 @@ async function lockMatch(ev: any, s: any, done: string[]) {
     cur = next;
   }
   const players: any = {}; for (const g of gm.values() as any) players[g.id] = { name: g.name, country: g.country, stable: g.stable, yr: g.yr, mid: g.manager_id, color: g.color };
-  const purse = mpBase(s, ev.tour.slice(3)) + E2.reduce((a: number, x: any) => a + (x.fee || 0), 0);
+  const purse = (ev.purse || 0) + E2.reduce((a: number, x: any) => a + (x.fee || 0), 0);
   await sb.from('events').update({ field: ent.length, purse, meta: { ...(ev.meta || {}), mp: { T, rounds, end: t0, players, wind } } }).eq('id', ev.id);
   done.push(`locked Match Play ${ev.tour}: ${ent.length} golfers, ${rounds.length} rounds`);
 }
