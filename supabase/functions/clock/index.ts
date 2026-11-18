@@ -834,9 +834,6 @@ async function rollover(w: any, s: any, done: string[]) {
   // only as many graduating college regulars turn pro as the pro tours have room for; the rest give up the game
   let over = sum(['p1', 'p2', 'p3']) - 3 * TARGET;
   for (const b of botMoves.filter((b) => E.isCol(b.from) && !b.retire).sort((a, b) => b.rank - a.rank)) { if (over <= 0) break; cnt[b.next]--; b.retire = true; b.quit = true; over--; }
-  // if the senior tours would run short, the best of this year's retirees play one more season
-  let short = 2 * TARGET - sum(['c1', 'c2']);
-  for (const b of botMoves.filter((b) => b.retire && !b.quit && b.g.yr < Y.last + 3 && (b.from === 'c1' || b.from === 'c2')).sort((a, b) => a.rank - b.rank)) { if (short <= 0) break; b.retire = false; b.next = b.from; cnt[b.from]++; short--; }
   for (const [hi, lo] of [['p1', 'p2'], ['p2', 'p3'], ['c1', 'c2']]) {
     const c = botMoves.filter((b) => b.from === lo && b.next === lo && !b.retire).sort((a, b) => a.rank - b.rank);
     for (const b of c) { if ((cnt[hi] || 0) >= TARGET) break; b.next = hi; cnt[hi] = (cnt[hi] || 0) + 1; cnt[lo]--; }

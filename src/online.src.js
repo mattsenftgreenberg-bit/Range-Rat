@@ -493,7 +493,7 @@ ${['jr','col0','p3','p2','p1','c2','c1'].map(t=>`<tr><td>${TOURS[t].name}</td><t
 
 <section class="sec gsec"><h2>The tour regulars</h2>
 <p>The computer golfers who fill the fields live careers of their own. Juniors and college players move up a class each season and improve as they go; the best junior seniors become college freshmen, and graduating college seniors turn pro, the top ${Math.round(FIELD*.2)} on the Challenger Tour and the rest on the Mini Tour.</p>
-<p>Computer pros get a little better in their first few years, then hold steady, and from 40 they start to slip, like everyone else. They're promoted and relegated on the standings, move to the senior tours at 50 and retire at about 60. Only as many college graduates turn pro as there's room for; the others give up the game. A dominant veteran won't stay on top forever.</p>
+<p>Computer pros get a little better in their first few years, then hold steady, and from 40 they start to slip, like everyone else. They're promoted and relegated on the standings, move to the senior tours at 50 and retire at 60, like everyone else. Only as many college graduates turn pro as there's room for; the others give up the game. A dominant veteran won't stay on top forever.</p>
 </section>
 <section class="sec gsec"><h2>Retirement and coaching</h2>
 <p>A retired golfer becomes a <b>coach</b> rated in four areas: short game, irons, long game and the head. Coaching talent is partly luck, but the better he played, the higher his floor: a former ${TOURS.p1.name} winner is never a bad coach.</p>
