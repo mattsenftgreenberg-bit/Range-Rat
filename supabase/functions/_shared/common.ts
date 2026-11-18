@@ -24,6 +24,7 @@ export const DEFAULTS: Record<string, any> = {
   purse_mult: 1, fee_mult: 1, sale_chance_mult: 1, coach_age_yr: 18, recruit_cost: 5000,
   weekends: true,
   market_size: 14, market_new: 4, ai_coaches: 30, market_prodigy_pct: 1,
+  ace_bonus: 100000,
   mp_on: true, mp_fee_jr: 250, mp_fee_col: 500, mp_fee_p3: 1000, mp_fee_c2: 1250, mp_fee_p2: 2000, mp_fee_c1: 3000, mp_fee_p1: 5000, mp_base: 0,
   qf_on: true, qf_every_min: 20, qf_fee: 200, qf_base: 20000, qf_add: 200, qf_bonus: 1000, qf_ace: 1000000,
 };

@@ -341,8 +341,13 @@ async function finalizeMatch(ev: any, s: any, done: string[]) {
     let out = 'won the Match Play'; if (id !== champ) { const r = mp.rounds.findIndex((R: any) => R.m.some((x: any) => x.b !== null && (x.w ? x.a : x.b) === id)); const pl = placeOf.get(id); out = pl === '2nd' ? 'lost the Match Play final' : pl === '3rd' ? 'won the third-place match at the Match Play' : pl === '4th' ? 'lost the third-place match at the Match Play' : pl === 'T3' ? 'reached the Match Play semifinals' : pl === 'T5' ? 'reached the Match Play quarterfinals' : `went out in round ${r + 1} of the Match Play`; }
     if (amt) await cash(p.mid, amt, 'prize', `${p.name}: Match Play${id === champ ? ' champion' : ''}`);
     const { data: g } = await sb.from('golfers').select('stats').eq('id', id).maybeSingle();
-    if (g) { const S = { ...(g.stats || {}) }; S.mp_ev = (S.mp_ev || 0) + 1; S.mp_wins = (S.mp_wins || 0) + (id === champ ? 1 : 0); S.mp_earn = (S.mp_earn || 0) + amt; await sb.from('golfers').update({ stats: S }).eq('id', id); }
+    // holes in one in any of his matches: the hole-in-one bonus, and they count in his aces
+    let aces = 0; for (const R of mp.rounds) for (const x of R.m.concat(R.third ? [R.third] : [])) { if (x.a === id) aces += x.h.filter((h: number[]) => h[0] === 1).length; if (x.b === id) aces += x.h.filter((h: number[]) => h[1] === 1).length; }
+    const ab = aces && s.ace_bonus > 0 ? s.ace_bonus * aces : 0;
+    if (ab) await cash(p.mid, ab, 'bonus', `${p.name}: hole in one at the Match Play`);
+    if (g) { const S = { ...(g.stats || {}) }; S.aces = (S.aces || 0) + aces; S.mp_ev = (S.mp_ev || 0) + 1; S.mp_wins = (S.mp_wins || 0) + (id === champ ? 1 : 0); S.mp_earn = (S.mp_earn || 0) + amt; await sb.from('golfers').update({ stats: S }).eq('id', id); }
     (news[p.mid] ??= []).push(`${p.name} ${out}${amt ? `: ${fmt$(amt)}` : ''}.`);
+    if (ab) news[p.mid].push(`${p.name} made ${aces > 1 ? aces + ' holes in one' : 'a hole in one'} at the Match Play: ${fmt$(ab)} bonus!`);
   }
   for (const mid in news) await addNews(mid, news[mid]);
   done.push(`final Match Play ${lv}: won by ${mp.players[champ]?.name}`);
@@ -504,6 +509,8 @@ async function finalize(ev: any, s: any, done: string[]) {
     }).eq('id', g.id);
     if (p.pay > 0) await cash(g.manager_id, p.pay, 'prize', `${g.name}: ${p.pos} at the ${ev.name}`);
     say(line);
+    // the hole-in-one bonus, for managers' golfers in every event
+    if (X.aces && s.ace_bonus > 0) { const b = s.ace_bonus * X.aces; await cash(g.manager_id, b, 'bonus', `${g.name}: hole in one at the ${ev.name}`); say(`${g.name} made ${X.aces > 1 ? X.aces + ' holes in one' : 'a hole in one'} at the ${ev.name}: ${fmt$(b)} bonus!`); }
   }
   for (const mid in news) await addNews(mid, news[mid]);
   done.push(`final ${ev.name}: won by ${win?.g?.name}`);
