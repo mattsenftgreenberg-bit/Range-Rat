@@ -291,7 +291,7 @@ async function lockMatch(ev: any, s: any, done: string[]) {
   const ent = ids.filter((id: string) => gm.has(id)).map((id: string) => ({ gid: id, mid: (gm.get(id) as any).manager_id }));
   let P = 1; while (P < ent.length) P *= 2;
   const course = E.COURSES[ev.ci], wind = { mph: Math.round(4 + Math.random() * 14), dir: Math.random() * Math.PI * 2 };
-  const T = Number(ev.round_min || s.round_min) * 60 / 18, rounds: any[] = [];
+  const T = Number(ev.round_min || s.round_min) * 60 / 18 * Number(s.mp_hole_mult || 1.4), rounds: any[] = [];
   let cur: (string | null)[][] = mpPairs(ent, P).map(([a, b]) => [a.gid, b ? b.gid : null]), t0 = 0;
   while (true) {
     const m = cur.map(([a, b]) => b === null ? { a, b, h: [], w: 0, res: 'bye' } : mpMatch(gm.get(a!), gm.get(b), course, wind)).map((x: any, i: number) => ({ a: cur[i][0], b: cur[i][1], ...x }));
