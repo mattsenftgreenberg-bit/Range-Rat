@@ -696,16 +696,28 @@ function g3LoadModel(){const g=G3;if(!g||g.fail||g.M||g.mLoading)return;const T3
   if(!T3.GLTFLoader){if(!g.ldr){g.ldr=1;const s=document.createElement('script');s.src='vendor/GLTFLoader-r128.js';s.onload=()=>g3LoadModel();s.onerror=()=>{g.mLoading=true;};document.head.appendChild(s);}return;}
   g.mLoading=true;const L=new T3.GLTFLoader(),get=f=>new Promise((ok,no)=>L.load('models/'+f+'.glb',ok,undefined,no));
   Promise.all([get('golfer'),...Object.values(G3M).map(c=>get(c.f))]).then(([gl,...an])=>{
-    const root=new T3.Group(),m=gl.scene,rig=new T3.Group();root.add(m);root.visible=false;rig.add(root);g.scene.add(rig);const shirt=[],U={skin:{value:new T3.Color()},hair:{value:new T3.Color()}};
+    const root=new T3.Group(),m=gl.scene,rig=new T3.Group();root.add(m);root.visible=false;rig.add(root);g.scene.add(rig);const shirt=[],shorts=[],U={skin:{value:new T3.Color()},hair:{value:new T3.Color()}};
     m.traverse(o=>{if(!o.isMesh)return;o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false;const mt=o.material=o.material.clone();mt.roughness=Math.max(mt.roughness||0,.8);mt.metalness=0;
       if(/Hair|Eyelash/.test(o.name)){mt.transparent=false;mt.alphaTest=.45;}
       // skin and hair tone are set per golfer: the skin keeps the texture's shading and features, re-toned; the hair takes a flat colour
       if(/Body/.test(o.name))mt.onBeforeCompile=sh=>{sh.uniforms.uTone=U.skin;sh.fragmentShader='uniform vec3 uTone;\n'+sh.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\n{float l=dot(diffuseColor.rgb,vec3(.2126,.7152,.0722));diffuseColor.rgb=mix(diffuseColor.rgb,uTone*min(2.2,l/.164),.9);}');};
       if(/Hair/.test(o.name))mt.onBeforeCompile=sh=>{sh.uniforms.uHair=U.hair;sh.fragmentShader='uniform vec3 uHair;\n'+sh.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\ndiffuseColor.rgb=uHair;');};
-      if(/Shirt/.test(o.name))shirt.push(mt);if(/Shorts/.test(o.name))mt.color.set('#4a5260');});
+      // golf clothes: the jersey becomes a plain shirt (its folds kept), the shorts plain golf shorts
+      if(/Shirt/.test(o.name)){shirt.push(mt);mt.map=null;}if(/Shorts/.test(o.name)){mt.map=null;shorts.push(mt);}if(/Socks/.test(o.name)){// football socks become ankle socks: below a line they stay white, above it they take the golfer's skin tone
+        o.geometry.computeBoundingBox();const bb=o.geometry.boundingBox,cut=bb.min.y+(bb.max.y-bb.min.y)*.3;mt.map=null;mt.normalMap=null;mt.color.set('#ffffff');
+        mt.onBeforeCompile=sh=>{sh.uniforms.uTone=U.skin;sh.uniforms.uCut={value:cut};sh.vertexShader='varying float vSY;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvSY=position.y;');
+          sh.fragmentShader='uniform vec3 uTone;uniform float uCut;varying float vSY;\n'+sh.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\ndiffuseColor.rgb=mix(vec3(.9),uTone*.78,step(uCut,vSY));');};}});
+    // a collar and a cap, fitted in the bind pose and then carried by the neck and head bones
+    m.updateMatrixWorld(true);const Wp=n=>m.getObjectByName('mixamorig'+n).getWorldPosition(new T3.Vector3()),hd=Wp('Head'),tp=Wp('HeadTop_End'),nk=Wp('Neck'),sp=Wp('Spine2');
+    const hh=tp.y-hd.y,capM=new T3.MeshStandardMaterial({color:'#ffffff',roughness:.8}),colM=new T3.MeshStandardMaterial({color:'#ffffff',roughness:.85,side:T3.DoubleSide});shirt.push(colM);
+    const cap=new T3.Group(),cr=hh*.36,dome=new T3.Mesh(new T3.SphereGeometry(cr,24,12,0,Math.PI*2,0,Math.PI*.5),capM),brim=new T3.Mesh(new T3.CylinderGeometry(cr*.98,cr*.98,cr*.07,20,1,false,-Math.PI/2,Math.PI),capM),btn=new T3.Mesh(new T3.SphereGeometry(cr*.09,8,6),capM);
+    dome.scale.set(1.04,.78,1.1);brim.scale.set(.92,1,1.75);brim.position.set(0,cr*.05,cr*.42);brim.rotation.x=.06;btn.position.set(0,cr*.78,0);cap.add(dome,brim,btn);
+    cap.position.copy(hd).lerp(tp,.7).add(new T3.Vector3(0,0,-hh*.04));cap.traverse(x=>{if(x.isMesh)x.castShadow=true;});
+    const collar=new T3.Mesh(new T3.CylinderGeometry(hh*.38,hh*.5,hh*.28,24,1,true,.35,Math.PI*2-.7),colM);collar.position.copy(nk).lerp(sp,.12).add(new T3.Vector3(0,hh*.1,0));collar.castShadow=true;
+    m.add(cap,collar);m.getObjectByName('mixamorigHead').attach(cap);m.getObjectByName('mixamorigNeck').attach(collar);
     const mix=new T3.AnimationMixer(m),clips={};
     Object.keys(G3M).forEach((n,i)=>{const a=mix.clipAction(an[i].animations[0]);a.play();a.enabled=false;clips[n]=a;});
-    g.M={root,rig,m,mix,clips,shirt,U,B:n=>m.getObjectByName('mixamorig'+n),cal:{}};}).catch(()=>{});}
+    g.M={root,rig,m,mix,clips,shirt,shorts,capM,U,B:n=>m.getObjectByName('mixamorig'+n),cal:{}};}).catch(()=>{});}
 function g3At(n,t){const M=G3.M;
   // undo last frame's arm adjustments first: the mixer only rewrites a bone when its animated value changes, so they would otherwise pile up
   if(M.ik){M.ik.forEach(([b,q])=>b.quaternion.copy(q));M.ik=null;}Object.keys(M.clips).forEach(x=>{M.clips[x].enabled=x===n;});M.clips[n].time=t;M.mix.update(0);M.root.updateMatrixWorld(true);}
@@ -732,7 +744,7 @@ const G3REG={JP:'ea',KR:'ea',CN:'ea',TW:'ea',HK:'ea',MN:'ea',TH:'sea',PH:'sea',V
   MX:'la',AR:'la',CO:'la',CL:'la',PE:'la',VE:'la',PY:'la',UY:'la',BR:'mix',US:'mix',CA:'mix',AU:'mix',NZ:'mix',ZA:'mix'};
 const AFRICA='AO BJ BW BF BI CV CM CF TD KM CG CD CI DJ GQ ER SZ ET GA GM GH GN GW KE LS LR MG MW ML MR MU MZ NA NE NG RW ST SN SC SL SO SS SD TZ TG UG ZM ZW'.split(' ');
 function g3Look(who){const id=String(who&&who.id||''),reg=G3REG[who&&who.country]||(AFRICA.includes(who&&who.country)?'af':'mix'),L=G3LOOK[reg];let hs=7;for(const ch of id)hs=(hs*31+ch.charCodeAt(0))>>>0;
-  return {skin:L[0][hs%L[0].length],hair:L[1][(hs>>>8)%L[1].length]};}
+  return {skin:L[0][hs%L[0].length],hair:L[1][(hs>>>8)%L[1].length],shorts:['#2f3a4c','#c9b68e','#55595f','#e9e5da','#1f2328'][(hs>>>4)%5],cap:['#ffffff','#1f2328','#2f3a4c','#ffffff'][(hs>>>12)%4]};}
 // two-bone reach: turn the forearm and upper arm so the palm lands on a point (the club's grip)
 function g3Reach(sd,tgt){const M=G3.M,T3=G3.T3,eff=M.B(sd+'HandMiddle1');M.ik=M.ik||[];['ForeArm','Arm'].forEach(bn=>{const b=M.B(sd+bn);if(!M.ik.some(x=>x[0]===b))M.ik.push([b,b.quaternion.clone()]);});for(let it=0;it<3;it++)for(const bn of ['ForeArm','Arm']){const b=M.B(sd+bn),bp=b.getWorldPosition(new T3.Vector3()),v1=eff.getWorldPosition(new T3.Vector3()).sub(bp).normalize(),v2=tgt.clone().sub(bp).normalize();
   if(v1.dot(v2)>.99999)continue;const q=new T3.Quaternion().setFromUnitVectors(v1,v2),wq=b.getWorldQuaternion(new T3.Quaternion()),pq=b.parent.getWorldQuaternion(new T3.Quaternion());b.quaternion.copy(pq.invert().multiply(q.multiply(wq)));b.updateMatrixWorld(true);}}
@@ -745,7 +757,7 @@ function g3PoseModel(T,k,sh,col,who,ms){const g=G3,M=g.M,T3=g.T3,P=g.P,n=k==='pu
   let t=T<=.58?K[0]+(K[1]-K[0])*T/.58:T<=.75?K[1]+(K[2]-K[1])*(T-.58)/.17:K[2]+(K[3]-K[2])*Math.min(1,(T-.75)/.25);
   // given the time since the swing began, play the capture at one steady speed (impact lands on the game's moment of impact)
   if(ms!=null){const sw=swingMs(sh)||1,rate=(K[2]-K[0])/sw;t=Math.min(K[3],K[0]+ms*rate);T=t<=K[2]?.75*(t-K[0])/(K[2]-K[0]):.75+.25*(t-K[2])/(K[3]-K[2]);}
-  M.root.rotation.set(0,c.ry,0);M.root.position.copy(cal.off);g3At(n,t);M.shirt.forEach(mt=>mt.color.set(col));const lk=g3Look(who);M.U.skin.value.set(lk.skin).convertSRGBToLinear();M.U.hair.value.set(lk.hair).convertSRGBToLinear();
+  M.root.rotation.set(0,c.ry,0);M.root.position.copy(cal.off);g3At(n,t);M.shirt.forEach(mt=>mt.color.set(col));const lk=g3Look(who);M.shorts.forEach(mt=>mt.color.set(lk.shorts));M.capM.color.set(lk.cap);M.U.skin.value.set(lk.skin).convertSRGBToLinear();M.U.hair.value.set(lk.hair).convertSRGBToLinear();
   const grip=g3Grip(),qh=M.B('LeftHand').getWorldQuaternion(new T3.Quaternion()),ks=cal.keys;let dir,org;
   if(k==='putt'){// a putter rides with the hands like a pendulum, low to the ground
     org=cal.aim.clone().addScaledVector(grip.clone().sub(cal.grip),1.25);org.y=Math.min(.14,Math.max(cal.aim.y,cal.aim.y+(grip.y-cal.grip.y)*1.25));dir=org.clone().sub(grip).normalize();}
