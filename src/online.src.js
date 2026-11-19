@@ -569,12 +569,12 @@ function g3Init(){if(G3)return G3;if(!window.THREE)return null;const T3=window.T
   rd.setPixelRatio(1);rd.setSize(240,300,false);rd.shadowMap.enabled=true;rd.shadowMap.type=T3.PCFSoftShadowMap;
   const scene=new T3.Scene();scene.background=new T3.Color('#9fc4de');scene.fog=new T3.Fog('#9fc4de',9,26);
   const cam=new T3.PerspectiveCamera(27,240/300,.1,50);cam.position.set(2.2,1.5,5.5);cam.lookAt(.12,1.02,.1);
-  scene.add(new T3.HemisphereLight('#dfefff','#3d6b38',.55));
-  const sun=new T3.DirectionalLight('#fff4e0',.8);sun.position.set(2.5,5,3.5);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
+  scene.add(new T3.HemisphereLight('#dfefff','#3d6b38',.7));
+  const sun=new T3.DirectionalLight('#fff4e0',.95);sun.position.set(2.5,5,3.5);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
   Object.assign(sun.shadow.camera,{left:-2,right:2,top:2.5,bottom:-1,near:.5,far:15});sun.shadow.radius=4;scene.add(sun);
   // ground: fairway in front, with a mown stripe and a distant tree line
-  const gr=new T3.Mesh(new T3.PlaneGeometry(30,30),new T3.MeshStandardMaterial({color:'#5f9e4f',roughness:1}));gr.rotation.x=-Math.PI/2;gr.receiveShadow=true;scene.add(gr);
-  const strip=new T3.Mesh(new T3.PlaneGeometry(30,1.6),new T3.MeshStandardMaterial({color:'#6cab59',roughness:1}));strip.rotation.x=-Math.PI/2;strip.position.set(0,.002,.9);strip.receiveShadow=true;scene.add(strip);
+  const gr=new T3.Mesh(new T3.PlaneGeometry(30,30),new T3.MeshStandardMaterial({color:'#4f8f43',roughness:1}));gr.rotation.x=-Math.PI/2;gr.receiveShadow=true;scene.add(gr);
+  const strip=new T3.Mesh(new T3.PlaneGeometry(30,1.6),new T3.MeshStandardMaterial({color:'#5a9b4d',roughness:1}));strip.rotation.x=-Math.PI/2;strip.position.set(0,.002,.9);strip.receiveShadow=true;scene.add(strip);
   for(let i=0;i<14;i++){const t=new T3.Mesh(new T3.SphereGeometry(.9+Math.random()*.6,10,8),new T3.MeshStandardMaterial({color:i%2?'#2f5a34':'#386a3d',roughness:1}));t.position.set(-9+i*1.4,1.3+Math.random()*.6,-9-Math.random()*2);scene.add(t);}
   const M=(c,o)=>new T3.MeshStandardMaterial(Object.assign({color:c,roughness:.75},o||{}));
   const mat={shirt:M('#c2362a'),pants:M('#2d3436',{roughness:.85}),skin:M('#d9a57e',{roughness:.6}),shoe:M('#f2f2f2',{roughness:.5}),cap:M('#f4f4f4',{roughness:.6}),glove:M('#ffffff',{roughness:.5}),
@@ -637,9 +637,47 @@ function g3Pose(T,k,wood,col){const {T3,P,mat}=G3,V=(x,y,z)=>new T3.Vector3(x,y,
   // the ball: at address, then off toward the target after impact
   if(T<.75)P.ballM.position.copy(ballP);else{const q=Math.min(1,(T-.75)/.12);P.ballM.position.set(ballP.x+q*(putt?.8:3),ballP.y+q*(putt?0:k==='full'?2.2:.8),ballP.z-q*1.5);P.ballM.visible=q<1;}
   if(T<.75)P.ballM.visible=true;}
+// the motion-captured golfer (a Mixamo character and swings): loaded once, the first time someone watches; the mannequin stands in until then.
+// Each swing is mapped onto the game's swing timeline by four moments in the capture: address, top, impact and finish (seconds).
+const G3M={Drive:{f:'drive',k:[6.6,8.0,8.39,9.2],ry:-Math.PI/2},Chip:{f:'chip',k:[.45,1.1,1.42,1.9],ry:Math.PI/2},Putt:{f:'putt',k:[.45,1.0,1.28,1.55],ry:Math.PI/2}};
+function g3LoadModel(){const g=G3;if(!g||g.fail||g.M||g.mLoading)return;const T3=g.T3;
+  if(!T3.GLTFLoader){if(!g.ldr){g.ldr=1;const s=document.createElement('script');s.src='vendor/GLTFLoader-r128.js';s.onload=()=>g3LoadModel();s.onerror=()=>{g.mLoading=true;};document.head.appendChild(s);}return;}
+  g.mLoading=true;const L=new T3.GLTFLoader(),get=f=>new Promise((ok,no)=>L.load('models/'+f+'.glb',ok,undefined,no));
+  Promise.all([get('golfer'),...Object.values(G3M).map(c=>get(c.f))]).then(([gl,...an])=>{
+    const root=new T3.Group(),m=gl.scene;root.add(m);root.visible=false;g.scene.add(root);const shirt=[];
+    m.traverse(o=>{if(!o.isMesh)return;o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false;const mt=o.material=o.material.clone();mt.roughness=Math.max(mt.roughness||0,.8);mt.metalness=0;
+      if(/Hair|Eyelash/.test(o.name)){mt.transparent=false;mt.alphaTest=.45;}
+      if(/Shirt/.test(o.name))shirt.push(mt);if(/Shorts/.test(o.name))mt.color.set('#4a5260');});
+    const mix=new T3.AnimationMixer(m),clips={};
+    Object.keys(G3M).forEach((n,i)=>{const a=mix.clipAction(an[i].animations[0]);a.play();a.enabled=false;clips[n]=a;});
+    g.M={root,m,mix,clips,shirt,B:n=>m.getObjectByName('mixamorig'+n),cal:{}};}).catch(()=>{});}
+function g3At(n,t){const M=G3.M;Object.keys(M.clips).forEach(x=>{M.clips[x].enabled=x===n;});M.clips[n].time=t;M.mix.update(0);M.root.updateMatrixWorld(true);}
+// the grip: between the two hands, a little along the fingers
+function g3Grip(){const M=G3.M,T3=G3.T3,w=n=>M.B(n).getWorldPosition(new T3.Vector3());return w('LeftHandMiddle1').add(w('RightHandMiddle1')).multiplyScalar(.5);}
+// stand him on the ground at the origin, and find how the club sits in his left hand so it meets the ball at impact
+function g3Cal(n,L){const M=G3.M,T3=G3.T3,c=G3M[n],w=b=>M.B(b).getWorldPosition(new T3.Vector3());M.root.rotation.set(0,c.ry,0);M.root.position.set(0,0,0);
+  g3At(n,c.k[0]);const lf=w('LeftToeBase'),rf=w('RightToeBase'),mid=lf.clone().add(rf).multiplyScalar(.5),fy=Math.min(w('LeftFoot').y,w('RightFoot').y);
+  const off=new T3.Vector3(-mid.x,-(Math.min(lf.y,rf.y)-.035),-mid.z+.0);
+  g3At(n,c.k[0]);const grip=g3Grip().add(off),hy=grip.y-.03,dir=new T3.Vector3(0,-Math.min(hy,L*.97),0);dir.z=Math.sqrt(Math.max(0,L*L-dir.y*dir.y));dir.normalize();
+  const q=M.B('LeftHand').getWorldQuaternion(new T3.Quaternion());const ball=grip.clone().addScaledVector(dir,L);ball.y=.0215;
+  return {off,ldir:dir.clone().applyQuaternion(q.invert()),ball,fy,grip};}
+function g3PoseModel(T,k,wood,col){const g=G3,M=g.M,T3=g.T3,P=g.P,n=k==='putt'?'Putt':k==='chip'?'Chip':'Drive',c=G3M[n],K=c.k;
+  const L=k==='putt'?.86:k==='chip'?.92:wood?1.1:.98,key=n+L,cal=M.cal[key]||(M.cal[key]=g3Cal(n,L));
+  const t=T<=.58?K[0]+(K[1]-K[0])*T/.58:T<=.75?K[1]+(K[2]-K[1])*(T-.58)/.17:K[2]+(K[3]-K[2])*Math.min(1,(T-.75)/.25);
+  M.root.rotation.set(0,c.ry,0);M.root.position.copy(cal.off);g3At(n,t);M.shirt.forEach(mt=>mt.color.set(col));
+  const grip=g3Grip(),dir=cal.ldir.clone().applyQuaternion(M.B('LeftHand').getWorldQuaternion(new T3.Quaternion()));
+  // the capture's hands don't hold a real club, so through the hitting zone the shaft is steered onto the ball
+  const wz=Math.max(0,1-Math.abs(T-.75)/(T<.75?.09:.06));if(wz>0){const tb=cal.ball.clone().sub(grip).normalize();dir.lerp(tb,wz*wz*(3-2*wz)).normalize();}
+  let head=grip.clone().addScaledVector(dir,L);
+  // a putter rides with the hands like a pendulum, low to the ground
+  if(k==='putt'){head=cal.ball.clone().addScaledVector(grip.clone().sub(cal.grip),1.25);head.y=Math.min(.14,Math.max(.025,cal.ball.y+(grip.y-cal.grip.y)*1.25));dir.copy(head).sub(grip).normalize();}
+  g3Seg(P.shaft,grip.clone().addScaledVector(dir,-.06),head);P.clubHead.position.copy(head);P.clubHead.quaternion.copy(P.shaft.quaternion);
+  P.clubHead.scale.set(k==='putt'?.9:wood?1.4:1,wood?1.6:1,wood?1.5:.8);
+  const b=cal.ball;if(T<.75){P.ballM.position.copy(b);P.ballM.visible=true;}else{const q=Math.min(1,(T-.75)/.12);P.ballM.position.set(b.x+q*(k==='putt'?.8:3),b.y+q*(k==='putt'?0:k==='full'?2.2:.8),b.z-q*1.5);P.ballM.visible=q<1;}}
 // render the 3D swing into a panel; returns false if 3D isn't available (the flat drawing is used instead)
 function drawSwing3D(c,x,y,w,h,u,sh,T,col){loadThree();const g=g3Init();if(!g||g.fail)return false;
-  g3Pose(T,sh.k,isWood(sh),col);g.rd.render(g.scene,g.cam);
+  g3LoadModel();const real=!!g.M;Object.keys(g.P).forEach(n=>{if(!/^(shaft|clubHead|ballM)$/.test(n))g.P[n].visible=!real;});
+  if(real){g.M.root.visible=true;g3PoseModel(T,sh.k,isWood(sh),col);}else g3Pose(T,sh.k,isWood(sh),col);g.rd.render(g.scene,g.cam);
   c.save();c.beginPath();if(c.roundRect)c.roundRect(x,y,w,h,u*.5);else c.rect(x,y,w,h);c.clip();
   const sw=g.cv.width,shh=g.cv.height,s=Math.max(w/sw,h/shh);c.drawImage(g.cv,x+(w-sw*s)/2,y+(h-shh*s)/2,sw*s,shh*s);c.restore();
   c.save();c.strokeStyle='rgba(255,255,255,.25)';c.lineWidth=1;c.beginPath();if(c.roundRect)c.roundRect(x,y,w,h,u*.5);else c.rect(x,y,w,h);c.stroke();
