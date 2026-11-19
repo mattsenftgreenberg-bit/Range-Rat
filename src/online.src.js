@@ -458,7 +458,8 @@ function drawCourse(c,W,H,h,X,Y,Sc){
   c.fillStyle=MAP.tee;c.beginPath();if(c.roundRect)c.roundRect(X(-6),Y(5),12*Sc,10*Sc,3*Sc);else c.rect(X(-6),Y(5),12*Sc,10*Sc);c.fill();
   c.fillStyle='rgba(255,255,255,.12)';c.fillRect(X(-6),Y(1),12*Sc,2*Sc);
   // water: an organic pond with a darker edge and a glint
-  h.water.forEach((w,i)=>{blobPath(c,X,Y,Sc,w.x,w.y,w.ry,h,20+i,.14,w.rx/w.ry,w.rot);c.fillStyle=MAP.water;c.fill();c.lineWidth=Math.max(1.5,1.6*Sc);c.strokeStyle='rgba(10,40,70,.45)';c.stroke();
+  // drawn to the same ellipse the engine plays (rx across the hole, ry along it), so what looks wet is wet
+  h.water.forEach((w,i)=>{blobPath(c,X,Y,Sc,w.x,w.y,Math.sqrt(w.rx*w.ry),h,20+i,.06,w.rx/w.ry,-w.rot);c.fillStyle=MAP.water;c.fill();c.lineWidth=Math.max(1.5,1.6*Sc);c.strokeStyle='rgba(10,40,70,.45)';c.stroke();
     c.save();c.clip();c.fillStyle='rgba(255,255,255,.12)';c.beginPath();c.ellipse(X(w.x-w.rx*.25),Y(w.y+w.ry*.3),w.rx*.5*Sc,w.ry*.18*Sc,w.rot,0,6.3);c.fill();c.restore();});
   // the green: fringe and putting surface, with fine stripes
   const gRot=hRand(h,5)*3.1,gEl=1+hRand(h,6)*.18;
