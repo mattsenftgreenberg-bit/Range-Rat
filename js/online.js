@@ -665,7 +665,27 @@ function g3Pose(T,k,wood,col){const {T3,P,mat}=G3,V=(x,y,z)=>new T3.Vector3(x,y,
   if(T<.75)P.ballM.visible=true;}
 // the motion-captured golfer (a Mixamo character and swings): loaded once, the first time someone watches; the mannequin stands in until then.
 // Each swing is mapped onto the game's swing timeline by four moments in the capture: address, top, impact and finish (seconds).
-const G3M={Drive:{f:'drive',k:[6.6,8.0,8.39,9.2],ry:-Math.PI/2},Chip:{f:'chip',k:[.45,1.1,1.42,1.9],ry:Math.PI/2},Putt:{f:'putt',k:[.45,1.0,1.28,1.55],ry:Math.PI/2}};
+// keys: moments in each capture with where the shaft points then ('ball' = at the ball; otherwise a direction, target = +x, toward the ball = +z)
+const G3M={Drive:{f:'drive',k:[6.6,8.0,8.39,9.2],ry:-Math.PI/2,keys:[[6.6,'ball'],[7.4,[-1,.15,.12]],[8.0,[1,.05,-.25]],[8.39,'ball'],[8.62,[.55,.8,.12]],[9.2,[-.6,-.55,-.55]]]},
+  Chip:{f:'chip',k:[.45,1.1,1.42,1.9],ry:Math.PI/2,keys:[[.45,'ball'],[.85,[-1,.2,.12]],[1.1,[-.35,.93,-.1]],[1.42,'ball'],[1.6,[.7,.6,.2]],[1.9,[.15,.95,-.25]]]},
+  Putt:{f:'putt',k:[.45,1.0,1.28,1.55],ry:Math.PI/2,keys:[]}};
+// real-looking clubs, built in the club's own frame: the hosel at the origin, the shaft up +y to the butt, the face looking along +x, the toe out along +z
+const G3CLUB={driver:{L:1.14,lie:56},wood:{L:1.07,lie:57},iron:{L:.96,lie:62},wedge:{L:.9,lie:64},putter:{L:.86,lie:70}};
+function g3Club(type){const T3=G3.T3,c=G3CLUB[type],L=c.L,gp=new T3.Group(),M=(col,o)=>new T3.MeshStandardMaterial(Object.assign({color:col,roughness:.35,metalness:.85},o||{}));
+  const add=(geo,m,par,pos)=>{const x=new T3.Mesh(geo,m);x.castShadow=true;if(pos)x.position.set(...pos);(par||gp).add(x);return x;};
+  const steel=M('#c9ced3',{roughness:.3,metalness:.4}),chrome=M('#d7dce0',{roughness:.28,metalness:.35}),dark=M('#23272c',{roughness:.25,metalness:.25}),grip=M('#1a1a1a',{roughness:.9,metalness:0});
+  add(new T3.CylinderGeometry(.0072,.0045,L-.33,10),type==='driver'||type==='wood'?M('#2a2d33',{roughness:.4,metalness:.3}):steel,gp,[0,.07+(L-.33)/2,0]);
+  add(new T3.CylinderGeometry(.0125,.0105,.26,12),grip,gp,[0,L-.13,0]);
+  add(new T3.CylinderGeometry(.0085,.0068,.075,10),type==='driver'||type==='wood'?dark:chrome,gp,[0,.035,0]);
+  const hd=new T3.Group();hd.rotation.x=(90-c.lie)*Math.PI/180;gp.add(hd);
+  if(type==='driver'||type==='wood'){const k=type==='driver'?1:.78,b=add(new T3.SphereGeometry(.5,24,16),dark,hd,[-.052*k,.03*k,.06*k]);b.scale.set(.11*k,.058*k,.12*k);
+    add(new T3.BoxGeometry(.004,.044*k,.095*k),M('#5a6068',{roughness:.5}),hd,[.002,.028*k,.06*k]);}
+  else if(type==='putter'){add(new T3.BoxGeometry(.028,.024,.11),M('#b9bfc5',{roughness:.3,metalness:.35}),hd,[-.014,.013,.05]);add(new T3.BoxGeometry(.03,.002,.004),M('#111',{metalness:0}),hd,[-.014,.026,.05]);}
+  else{// an iron's blade: low at the heel, rising to a rounded toe
+    const h=type==='wedge'?1.15:1,sp=new T3.Shape();sp.moveTo(0,.004);sp.lineTo(.07,0);sp.quadraticCurveTo(.086,.002,.085,.028*h);sp.quadraticCurveTo(.083,.05*h,.064,.053*h);sp.lineTo(.008,.037*h);sp.quadraticCurveTo(0,.035*h,0,.02);sp.lineTo(0,.004);
+    const bl=add(new T3.ExtrudeGeometry(sp,{depth:.016,bevelEnabled:true,bevelThickness:.003,bevelSize:.002,bevelSegments:2,curveSegments:8}),chrome,hd,[-.003,0,.004]);bl.rotation.y=-Math.PI/2;
+    const gr=add(new T3.PlaneGeometry(.06,.03*h),M('#aab0b6',{roughness:.6,metalness:.2}),hd,[.0005,.022*h,.044]);gr.rotation.y=Math.PI/2;}
+  gp.visible=false;G3.scene.add(gp);return gp;}
 function g3LoadModel(){const g=G3;if(!g||g.fail||g.M||g.mLoading)return;const T3=g.T3;
   if(!T3.GLTFLoader){if(!g.ldr){g.ldr=1;const s=document.createElement('script');s.src='vendor/GLTFLoader-r128.js';s.onload=()=>g3LoadModel();s.onerror=()=>{g.mLoading=true;};document.head.appendChild(s);}return;}
   g.mLoading=true;const L=new T3.GLTFLoader(),get=f=>new Promise((ok,no)=>L.load('models/'+f+'.glb',ok,undefined,no));
@@ -680,30 +700,38 @@ function g3LoadModel(){const g=G3;if(!g||g.fail||g.M||g.mLoading)return;const T3
 function g3At(n,t){const M=G3.M;Object.keys(M.clips).forEach(x=>{M.clips[x].enabled=x===n;});M.clips[n].time=t;M.mix.update(0);M.root.updateMatrixWorld(true);}
 // the grip: between the two hands, a little along the fingers
 function g3Grip(){const M=G3.M,T3=G3.T3,w=n=>M.B(n).getWorldPosition(new T3.Vector3());return w('LeftHandMiddle1').add(w('RightHandMiddle1')).multiplyScalar(.5);}
-// stand him on the ground at the origin, and find how the club sits in his left hand so it meets the ball at impact
-function g3Cal(n,L){const M=G3.M,T3=G3.T3,c=G3M[n],w=b=>M.B(b).getWorldPosition(new T3.Vector3());M.root.rotation.set(0,c.ry,0);M.root.position.set(0,0,0);
-  g3At(n,c.k[0]);const lf=w('LeftToeBase'),rf=w('RightToeBase'),mid=lf.clone().add(rf).multiplyScalar(.5),fy=Math.min(w('LeftFoot').y,w('RightFoot').y);
-  const off=new T3.Vector3(-mid.x,-(Math.min(lf.y,rf.y)-.035),-mid.z+.0);
-  g3At(n,c.k[0]);const grip=g3Grip().add(off),hy=grip.y-.03,dir=new T3.Vector3(0,-Math.min(hy,L*.97),0);dir.z=Math.sqrt(Math.max(0,L*L-dir.y*dir.y));dir.normalize();
-  const q=M.B('LeftHand').getWorldQuaternion(new T3.Quaternion());const ball=grip.clone().addScaledVector(dir,L);ball.y=.0215;
-  return {off,ldir:dir.clone().applyQuaternion(q.invert()),ball,fy,grip};}
-function g3PoseModel(T,k,wood,col){const g=G3,M=g.M,T3=g.T3,P=g.P,n=k==='putt'?'Putt':k==='chip'?'Chip':'Drive',c=G3M[n],K=c.k;
-  const L=k==='putt'?.86:k==='chip'?.92:wood?1.1:.98,key=n+L,cal=M.cal[key]||(M.cal[key]=g3Cal(n,L));
+// stand him on the ground at the origin; then, at each key moment, note how the shaft sits in his left hand, so between keys it turns with his wrists
+function g3Cal(n,type){const M=G3.M,T3=G3.T3,c=G3M[n],L=G3CLUB[type].L,w=b=>M.B(b).getWorldPosition(new T3.Vector3()),qh=()=>M.B('LeftHand').getWorldQuaternion(new T3.Quaternion());
+  M.root.rotation.set(0,c.ry,0);M.root.position.set(0,0,0);g3At(n,c.k[0]);const lf=w('LeftToeBase'),rf=w('RightToeBase'),mid=lf.clone().add(rf).multiplyScalar(.5);
+  const off=new T3.Vector3(-mid.x,-(Math.min(lf.y,rf.y)-.035),-mid.z);M.root.position.copy(off);g3At(n,c.k[0]);
+  const grip=g3Grip(),R=L-.09,hy=grip.y-.012,dir=new T3.Vector3(0,-Math.min(hy,R*.97),0);dir.z=Math.sqrt(Math.max(0,R*R-dir.y*dir.y));dir.normalize();
+  const aim=grip.clone().addScaledVector(dir,R),ball=aim.clone().add(new T3.Vector3(0,0,type==='driver'?.055:.035));ball.y=type==='driver'?.05:.0215;const qa=qh();
+  const keys=c.keys.map(([t,d])=>{g3At(n,t);const gp=g3Grip(),v=d==='ball'?aim.clone().sub(gp).normalize():new T3.Vector3(...d).normalize();return {t,l:v.applyQuaternion(qh().invert())};});
+  return {off,ball,aim,grip,qa,keys,R};}
+function g3PoseModel(T,k,sh,col){const g=G3,M=g.M,T3=g.T3,P=g.P,n=k==='putt'?'Putt':k==='chip'?'Chip':'Drive',c=G3M[n],K=c.k;
+  const type=k==='putt'?'putter':k==='chip'?'wedge':/^Driver/i.test(sh.text||'')?'driver':isWood(sh)?'wood':/wedge|^PW|^SW|^LW|^GW/i.test(sh.text||'')?'wedge':'iron';
+  const key=n+type,cal=M.cal[key]||(M.cal[key]=g3Cal(n,type));M.clubs=M.clubs||{};const club=M.clubs[type]||(M.clubs[type]=g3Club(type));
+  Object.values(M.clubs).forEach(x=>{x.visible=x===club;});P.shaft.visible=P.clubHead.visible=false;
   const t=T<=.58?K[0]+(K[1]-K[0])*T/.58:T<=.75?K[1]+(K[2]-K[1])*(T-.58)/.17:K[2]+(K[3]-K[2])*Math.min(1,(T-.75)/.25);
   M.root.rotation.set(0,c.ry,0);M.root.position.copy(cal.off);g3At(n,t);M.shirt.forEach(mt=>mt.color.set(col));
-  const grip=g3Grip(),dir=cal.ldir.clone().applyQuaternion(M.B('LeftHand').getWorldQuaternion(new T3.Quaternion()));
-  // the capture's hands don't hold a real club, so through the hitting zone the shaft is steered onto the ball
-  const wz=Math.max(0,1-Math.abs(T-.75)/(T<.75?.09:.06));if(wz>0){const tb=cal.ball.clone().sub(grip).normalize();dir.lerp(tb,wz*wz*(3-2*wz)).normalize();}
-  let head=grip.clone().addScaledVector(dir,L);
-  // a putter rides with the hands like a pendulum, low to the ground
-  if(k==='putt'){head=cal.ball.clone().addScaledVector(grip.clone().sub(cal.grip),1.25);head.y=Math.min(.14,Math.max(.025,cal.ball.y+(grip.y-cal.grip.y)*1.25));dir.copy(head).sub(grip).normalize();}
-  g3Seg(P.shaft,grip.clone().addScaledVector(dir,-.06),head);P.clubHead.position.copy(head);P.clubHead.quaternion.copy(P.shaft.quaternion);
-  P.clubHead.scale.set(k==='putt'?.9:wood?1.4:1,wood?1.6:1,wood?1.5:.8);
+  const grip=g3Grip(),qh=M.B('LeftHand').getWorldQuaternion(new T3.Quaternion()),ks=cal.keys;let dir,org;
+  if(k==='putt'){// a putter rides with the hands like a pendulum, low to the ground
+    org=cal.aim.clone().addScaledVector(grip.clone().sub(cal.grip),1.25);org.y=Math.min(.14,Math.max(cal.aim.y,cal.aim.y+(grip.y-cal.grip.y)*1.25));dir=org.clone().sub(grip).normalize();}
+  else{let i=0;while(i<ks.length-2&&t>ks[i+1].t)i++;const u=Math.max(0,Math.min(1,(t-ks[i].t)/(ks[i+1].t-ks[i].t))),e=u*u*(3-2*u);
+    dir=ks[i].l.clone().lerp(ks[i+1].l,e).normalize().applyQuaternion(qh);
+    const wz=Math.max(0,1-Math.abs(T-.75)/.05);if(wz>0)dir.lerp(cal.aim.clone().sub(grip).normalize(),wz).normalize();
+    org=grip.clone().addScaledVector(dir,cal.R);}
+  // the face: square at address and impact, turning with the hands in between
+  const f=new T3.Vector3(1,0,0).applyQuaternion(qh.clone().multiply(cal.qa.clone().invert())),sq=k==='putt'?1:Math.max(0,1-Math.min(Math.abs(T)/.25,Math.abs(T-.75)/.12));
+  f.lerp(new T3.Vector3(1,0,0),sq);const Y=dir.clone().negate(),X=f.sub(Y.clone().multiplyScalar(f.dot(Y)));if(X.lengthSq()<1e-6)X.set(0,0,1);X.normalize();const Z=X.clone().cross(Y);
+  club.quaternion.setFromRotationMatrix(new T3.Matrix4().makeBasis(X,Y,Z));club.position.copy(org);
+  if(!M.tee){M.tee=new T3.Mesh(new T3.CylinderGeometry(.004,.0015,.045,8),new T3.MeshStandardMaterial({color:'#f3f0e6',roughness:.6}));M.tee.castShadow=true;g.scene.add(M.tee);}
+  M.tee.visible=type==='driver';M.tee.position.set(cal.ball.x,.0175,cal.ball.z);
   const b=cal.ball;if(T<.75){P.ballM.position.copy(b);P.ballM.visible=true;}else{const q=Math.min(1,(T-.75)/.12);P.ballM.position.set(b.x+q*(k==='putt'?.8:3),b.y+q*(k==='putt'?0:k==='full'?2.2:.8),b.z-q*1.5);P.ballM.visible=q<1;}}
 // render the 3D swing into a panel; returns false if 3D isn't available (the flat drawing is used instead)
 function drawSwing3D(c,x,y,w,h,u,sh,T,col){loadThree();const g=g3Init();if(!g||g.fail)return false;
   g3LoadModel();const real=!!g.M;Object.keys(g.P).forEach(n=>{if(!/^(shaft|clubHead|ballM)$/.test(n))g.P[n].visible=!real;});
-  if(real){g.M.root.visible=true;g3PoseModel(T,sh.k,isWood(sh),col);}else g3Pose(T,sh.k,isWood(sh),col);g.rd.render(g.scene,g.cam);
+  if(real){g.M.root.visible=true;g3PoseModel(T,sh.k,sh,col);}else{g.P.shaft.visible=g.P.clubHead.visible=true;g3Pose(T,sh.k,isWood(sh),col);}g.rd.render(g.scene,g.cam);
   c.save();c.beginPath();if(c.roundRect)c.roundRect(x,y,w,h,u*.5);else c.rect(x,y,w,h);c.clip();
   const sw=g.cv.width,shh=g.cv.height,s=Math.max(w/sw,h/shh);c.drawImage(g.cv,x+(w-sw*s)/2,y+(h-shh*s)/2,sw*s,shh*s);c.restore();
   c.save();c.strokeStyle='rgba(255,255,255,.25)';c.lineWidth=1;c.beginPath();if(c.roundRect)c.roundRect(x,y,w,h,u*.5);else c.rect(x,y,w,h);c.stroke();
