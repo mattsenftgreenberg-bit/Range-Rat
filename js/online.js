@@ -372,6 +372,9 @@ async function loadStand(t){const {data}=await SB.from('standings').select('pts,
 /* ---------- watching a golfer: the hole map, played on the clock ---------- */
 // The server reveals each hole when it's reached on the clock. Live, we animate each new hole as it arrives;
 // tapping a hole on the scorecard replays it.
+// the holing-out line in the commentary says what it was for: "Taps in for par."
+function holedFor(text,sc,par){if(sc===undefined||sc===null)return text;const d=sc-par,t=String(text).replace(/[.!]\s*$/,'');
+  return `${t} ${sc===1?'for a hole in one!':d<=-3?'for albatross!':d===-2?'for eagle!':d===-1?'for birdie.':d===0?'for par.':d===1?'for bogey.':d===2?'for double bogey.':d===3?'for triple bogey.':`for a ${sc}.`}`;}
 const SCORE_NAMES={'-3':'Albatross','-2':'Eagle','-1':'Birdie','0':'Par','1':'Bogey','2':'Double bogey','3':'Triple bogey'};
 const shotDur=s=>s.k==='full'?900+dist(s.from,s.to)*2.4:s.k==='chip'?800:s.k==='putt'?750:s.k==='drop'?350:500;
 const hkey=(r,h)=>r*18+h;
@@ -430,7 +433,7 @@ function startLoop(){fitCanvas();paintHUD();paintSide();if(!rafOn){rafOn=true;la
 function frame(ts){const A=ui.anim;if(ui.view!=='board'||!ui.watch||!A||!document.getElementById('cv')){rafOn=false;return;}
   const dt=A.paused?0:Math.min(60,ts-lastTs)*A.speed;lastTs=ts;
   if(A.cur&&A.cur.shots.length){
-    if(A.phase==='shot'){const sh=A.cur.shots[A.si];A.t+=dt/shotDur(sh);if(A.t>=1){A.t=1;feedA(sh.text);A.trail.push(sh);A.phase='wait';A.w=0;}}
+    if(A.phase==='shot'){const sh=A.cur.shots[A.si];A.t+=dt/shotDur(sh);if(A.t>=1){A.t=1;feedA(sh.holed?holedFor(sh.text,(watchScores()[A.cur.round]||[])[A.cur.hole],A.h.par):sh.text);A.trail.push(sh);A.phase='wait';A.w=0;}}
     else if(A.phase==='wait'){A.w+=dt;if(A.w>(A.cur.shots[A.si].holed?1000:750)){A.si++;if(A.si>=A.cur.shots.length){A.si=A.cur.shots.length-1;endHoleA();}else{A.phase='shot';A.t=0;}}}
     else if(A.phase==='post'){A.w+=dt;if(A.w>1700){A.phase='idle';if(A.live)syncAnim();}}
     drawMap(dt);
@@ -766,7 +769,8 @@ function mFrame(ts){const M=ui.ma,cv=document.getElementById('mcv');if(ui.view!=
   const b=ui.mpb,x=mpGet(b,M.key),avail=x?Math.min(x.h.length,(ui.mps&&ui.mps.key===M.key?ui.mps.s.length:0)):0,behind=M.live&&x&&!x.over&&avail-1>M.i+1;
   const dt=M.paused?0:Math.min(60,ts-mTs)*(M.speed||1)*(M.live?(M.fit||1)*(behind?2:1):1);mTs=ts;
   if(M.seq&&M.seq.length){const q=M.seq[M.si];
-    if(M.phase==='shot'){M.t+=dt/shotDur(q.sh);if(M.t>=1){M.t=1;const Bq=M.balls[q.p],tp=b.team&&b.players[Bq.side?x.b:x.a];mFeed(`${tp?`<b>${Bq.mem+1} ${esc(lastName(tp.members[Bq.mem].name))}:</b> `:''}${esc(q.sh.text)}`,'',q.side);if(q.sh.k!=='drop'&&q.sh.k!=='pick')M.trail[q.p].push(q.sh);M.pos[q.p]=q.sh.to;if(q.sh.holed)M.holed[q.p]=true;M.phase='wait';M.w=0;}}
+    if(M.phase==='shot'){M.t+=dt/shotDur(q.sh);if(M.t>=1){M.t=1;const Bq=M.balls[q.p],tp=b.team&&b.players[Bq.side?x.b:x.a];const hs=q.sh.holed&&x?(b.team?(x.ms&&x.ms[M.i]?x.ms[M.i][q.side][Bq.mem]:undefined):(x.h[M.i]||[])[q.side]):undefined;
+      mFeed(`${tp?`<b>${Bq.mem+1} ${esc(lastName(tp.members[Bq.mem].name))}:</b> `:''}${esc(q.sh.holed?holedFor(q.sh.text,hs,M.h.par):q.sh.text)}`,'',q.side);if(q.sh.k!=='drop'&&q.sh.k!=='pick')M.trail[q.p].push(q.sh);M.pos[q.p]=q.sh.to;if(q.sh.holed)M.holed[q.p]=true;M.phase='wait';M.w=0;}}
     else if(M.phase==='wait'){M.w+=dt;if(M.w>mWait(q.sh)){M.si++;if(M.si>=M.seq.length){M.si=M.seq.length-1;mEndHole();}else{M.phase='shot';M.t=0;}}}
     else if(M.phase==='post'){M.w+=dt;if(M.w>1700){M.phase='idle';if(M.live)mpSync();}}}
   else if(M.phase==='post'){M.w+=dt;if(M.w>1700){M.phase='idle';if(M.live)mpSync();}}
