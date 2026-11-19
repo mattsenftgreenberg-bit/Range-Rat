@@ -354,8 +354,8 @@ async function finalizeMatch(ev: any, s: any, done: string[]) {
   done.push(`final Match Play ${lv}: won by ${mp.players[champ]?.name}`);
 }
 
-// ---------- Team Match Play: four golfers a side, best ball, knockout ----------
-// Tour is 'tm:<level>'. Each manager's golfers entered in the event make up one team (up to four; computer regulars
+// ---------- Team Match Play: two golfers a side (setting tm_size), best ball, knockout ----------
+// Tour is 'tm:<level>'. Each manager's golfers entered in the event make up one team (up to tm_size; computer regulars
 // from that tour fill the empty places). One fee per team, charged on the first golfer entered. With two or more
 // teams it's a bracket like Match Play; with one team it's a single match against a computer team, and the house
 // matches the fee so a win pays double. Kept in meta.mp like Match Play, with `team: true`.
@@ -414,16 +414,16 @@ async function lockTeam(ev: any, s: any, done: string[]) {
   const { data: gs } = await sb.from('golfers').select('id,name,country,stable,yr,manager_id,sk,eq,fatigue,conf,carry,color').in('id', ids);
   const { data: secs } = await sb.from('golfer_secrets').select('golfer_id,peak,agg').in('golfer_id', ids);
   const sm = new Map((secs || []).map((x: any) => [x.golfer_id, x]));
-  const teams = new Map<string, any>();
+  const teams = new Map<string, any>(), size = Math.max(1, Number(s.tm_size) || 2);
   for (const g of (gs || []) as any[]) {
     const key = 'T' + g.manager_id; if (!teams.has(key)) teams.set(key, { key, mid: g.manager_id, stable: g.stable, members: [] });
-    const t = teams.get(key); if (t.members.length < 4) t.members.push({ ...g, peak: (sm.get(g.id) as any)?.peak ?? 1, agg: (sm.get(g.id) as any)?.agg ?? 0 });
+    const t = teams.get(key); if (t.members.length < size) t.members.push({ ...g, peak: (sm.get(g.id) as any)?.peak ?? 1, agg: (sm.get(g.id) as any)?.agg ?? 0 });
   }
   const vsBot = teams.size === 1, used = new Set<string>(ids);
   if (vsBot) teams.set('B', { key: 'B', mid: null, stable: null, members: [] });
-  for (const t of teams.values()) if (t.members.length < 4) { const fill = await tourRegulars(lv, 4 - t.members.length, used); fill.forEach((g) => used.add(g.id)); t.members.push(...fill); }
+  for (const t of teams.values()) if (t.members.length < size) { const fill = await tourRegulars(lv, size - t.members.length, used); fill.forEach((g) => used.add(g.id)); t.members.push(...fill); }
   const course = E.COURSES[ev.ci], wind = { mph: Math.round(4 + Math.random() * 14), dir: Math.random() * Math.PI * 2 };
-  const T = Number(ev.round_min || s.round_min) * 60 / 18 * Number(s.tm_hole_mult || 2.5), rounds: any[] = [];
+  const T = Number(ev.round_min || s.round_min) * 60 / 18 * Number(s.tm_hole_mult || 1.6), rounds: any[] = [];
   const side = (k: string) => teams.get(k).members;
   const keys = [...teams.keys()];
   let P = 1; while (P < keys.length) P *= 2;

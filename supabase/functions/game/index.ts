@@ -160,10 +160,10 @@ const A: Record<string, (c: any) => Promise<any>> = {
     const { data: ex } = await sb.from('entries').select('*').eq('event_id', ev.id).eq('golfer_id', g.id).maybeSingle();
     if (ex?.status === 'in') return {};
     let fee = ev.test ? 0 : ev.fee;
-    // Team Match Play: up to four golfers make one team, and the team fee is paid once, with the first of them
+    // Team Match Play: up to tm_size golfers (two) make one team, and the team fee is paid once, with the first of them
     if (String(ev.tour).startsWith('tm:')) {
       const { count } = await sb.from('entries').select('golfer_id', { count: 'exact', head: true }).eq('event_id', ev.id).eq('manager_id', uid).eq('status', 'in');
-      if ((count || 0) >= 4) no('Your team already has four golfers.');
+      if ((count || 0) >= (Number(s.tm_size) || 2)) no('Your team is already full.');
       if (count) fee = 0;
     }
     if (fee) await cash(uid, -fee, 'entry', `Entry: ${ev.name}`, false);
@@ -178,8 +178,8 @@ const A: Record<string, (c: any) => Promise<any>> = {
     const { data: ex } = await sb.from('entries').select('golfer_id,status').eq('event_id', ev.id).eq('manager_id', uid);
     const inn = new Set((ex || []).filter((x: any) => x.status === 'in').map((x: any) => x.golfer_id));
     let todo = (gs || []).filter((g: any) => (q ? ev.tour.slice(3) === (E.isCol(g.tour) ? 'col' : g.tour) : ev.tour === g.tour) && !inn.has(g.id));
-    // a team: the best of them, up to four in all, for one team fee
-    if (team) todo = todo.sort((a: any, b: any) => E.ovr(b.sk) - E.ovr(a.sk)).slice(0, Math.max(0, 4 - inn.size));
+    // a team: the best of them, up to tm_size in all, for one team fee
+    if (team) todo = todo.sort((a: any, b: any) => E.ovr(b.sk) - E.ovr(a.sk)).slice(0, Math.max(0, (Number(s.tm_size) || 2) - inn.size));
     if (!todo.length) no(team ? 'Your team is already full.' : 'All your golfers who can play are already in.');
     let fee = ev.test ? 0 : ev.fee, n = 0, short = 0, paid = 0;
     for (const g of todo) {
