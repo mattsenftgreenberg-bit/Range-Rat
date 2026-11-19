@@ -423,7 +423,7 @@ async function lockTeam(ev: any, s: any, done: string[]) {
   if (vsBot) teams.set('B', { key: 'B', mid: null, stable: null, members: [] });
   for (const t of teams.values()) if (t.members.length < size) { const fill = await tourRegulars(lv, size - t.members.length, used); fill.forEach((g) => used.add(g.id)); t.members.push(...fill); }
   const course = E.COURSES[ev.ci], wind = { mph: Math.round(4 + Math.random() * 14), dir: Math.random() * Math.PI * 2 };
-  const T = Number(ev.round_min || s.round_min) * 60 / 18 * Number(s.tm_hole_mult || 1.6), rounds: any[] = [];
+  const T = Number(ev.round_min || s.round_min) * 60 / 18 * Number(s.tm_hole_mult || 3.5), rounds: any[] = [];
   const side = (k: string) => teams.get(k).members;
   const keys = [...teams.keys()];
   let P = 1; while (P < keys.length) P *= 2;
