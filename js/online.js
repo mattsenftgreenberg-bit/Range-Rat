@@ -450,7 +450,7 @@ function frame(ts){const A=ui.anim;if(ui.view!=='board'||!ui.watch||!A||!documen
     if(A.phase==='shot'){const sh=A.cur.shots[A.si];A.t+=dt/shotDur(sh);if(A.t>=1){A.t=1;feedA(sh.holed?holedFor(sh.text,(watchScores()[A.cur.round]||[])[A.cur.hole],A.h.par):sh.text);A.trail.push(sh);A.phase='wait';A.w=0;}}
     else if(A.phase==='wait'){A.w+=dt;if(A.w>(A.cur.shots[A.si].holed?1000:750)){A.si++;if(A.si>=A.cur.shots.length){A.si=A.cur.shots.length-1;endHoleA();}else{A.phase='shot';A.t=0;}}}
     else if(A.phase==='post'){A.w+=dt;if(A.w>1700){A.phase='idle';if(A.live)syncAnim();}}
-    A.panel=null;drawMap(dt);const cvp=document.getElementById('cv');if(A.panel&&cvp&&(A.phase==='shot'||A.phase==='wait')){const q=A.panel;drawShotPanels(cvp.getContext('2d'),cvp.width,cvp.height,q.u,q.sh,q.P,q.live,q.col);}
+    A.panel=null;drawMap(dt);const cvp=document.getElementById('cv');if(A.panel&&cvp&&(A.phase==='shot'||A.phase==='wait')){const q=A.panel;drawShotPanels(cvp.getContext('2d'),cvp.width,cvp.height,q.u,q.sh,q.P,q.live,q.col,q.who);}
   }
   requestAnimationFrame(frame);}
 /* ---------- the hole map: shapes, tracers and the golfer ---------- */
@@ -558,7 +558,7 @@ function drawGolfer(c,X,Y,u,sh,T,col,fade){if(fade<=0||sh.k==='drop'||sh.k==='pi
 function panel(c,x,y,w,h,title,u){c.save();c.fillStyle='rgba(12,22,17,.72)';c.strokeStyle='rgba(255,255,255,.18)';c.lineWidth=1;c.beginPath();if(c.roundRect)c.roundRect(x,y,w,h,u*.5);else c.rect(x,y,w,h);c.fill();c.stroke();
   c.fillStyle='rgba(255,255,255,.7)';c.font=`600 ${Math.round(u*.85)}px 'Barlow Condensed','Arial Narrow',sans-serif`;c.textAlign='left';c.textBaseline='top';c.fillText(title,x+u*.5,y+u*.35);c.restore();}
 // the swing camera: the golfer side-on (facing us), the full swing from address to the finish
-function drawSwingCam(c,x,y,w,h,u,sh,T,col){if(sh.k==='drop'||sh.k==='pick')return;if(drawSwing3D(c,x,y,w,h,u,sh,T,col))return;panel(c,x,y,w,h,'SWING',u);
+function drawSwingCam(c,x,y,w,h,u,sh,T,col,who){if(sh.k==='drop'||sh.k==='pick')return;if(drawSwing3D(c,x,y,w,h,u,sh,T,col,who))return;panel(c,x,y,w,h,'SWING',u);
   const P=swingPose(T,sh.k),k=h/118,gy=y+h-8*k,cx=x+w*.5,rad=v=>v*Math.PI/180;
   c.save();c.beginPath();c.rect(x,y,w,h);c.clip();c.lineCap='round';c.lineJoin='round';
   c.strokeStyle='rgba(140,196,116,.6)';c.lineWidth=2*k;c.beginPath();c.moveTo(x+4*k,gy);c.lineTo(x+w-4*k,gy);c.stroke();
@@ -675,10 +675,10 @@ const G3CLUB={driver:{L:1.14,lie:56},wood:{L:1.07,lie:57},iron:{L:.96,lie:62},we
 function g3Club(type){const T3=G3.T3,c=G3CLUB[type],L=c.L,gp=new T3.Group(),M=(col,o)=>new T3.MeshStandardMaterial(Object.assign({color:col,roughness:.35,metalness:.85},o||{}));
   const add=(geo,m,par,pos)=>{const x=new T3.Mesh(geo,m);x.castShadow=true;if(pos)x.position.set(...pos);(par||gp).add(x);return x;};
   const steel=M('#c9ced3',{roughness:.3,metalness:.4}),chrome=M('#d7dce0',{roughness:.28,metalness:.35}),dark=M('#23272c',{roughness:.25,metalness:.25}),grip=M('#1a1a1a',{roughness:.9,metalness:0});
-  add(new T3.CylinderGeometry(.0072,.0045,L-.33,10),type==='driver'||type==='wood'?M('#2a2d33',{roughness:.4,metalness:.3}):steel,gp,[0,.07+(L-.33)/2,0]);
-  add(new T3.CylinderGeometry(.0125,.0105,.26,12),grip,gp,[0,L-.13,0]);
-  add(new T3.CylinderGeometry(.0085,.0068,.075,10),type==='driver'||type==='wood'?dark:chrome,gp,[0,.035,0]);
-  const hd=new T3.Group();hd.rotation.x=(90-c.lie)*Math.PI/180;gp.add(hd);
+  add(new T3.CylinderGeometry(.0095,.006,L-.33,10),type==='driver'||type==='wood'?M('#2a2d33',{roughness:.4,metalness:.3}):steel,gp,[0,.07+(L-.33)/2,0]);
+  add(new T3.CylinderGeometry(.0165,.0135,.26,12),grip,gp,[0,L-.13,0]);
+  add(new T3.CylinderGeometry(.011,.009,.075,10),type==='driver'||type==='wood'?dark:chrome,gp,[0,.035,0]);
+  const hd=new T3.Group();hd.rotation.x=(90-c.lie)*Math.PI/180;hd.scale.setScalar(1.3);gp.add(hd);
   if(type==='driver'||type==='wood'){const k=type==='driver'?1:.78,b=add(new T3.SphereGeometry(.5,24,16),dark,hd,[-.052*k,.03*k,.06*k]);b.scale.set(.11*k,.058*k,.12*k);
     add(new T3.BoxGeometry(.004,.044*k,.095*k),M('#5a6068',{roughness:.5}),hd,[.002,.028*k,.06*k]);}
   else if(type==='putter'){add(new T3.BoxGeometry(.028,.024,.11),M('#b9bfc5',{roughness:.3,metalness:.35}),hd,[-.014,.013,.05]);add(new T3.BoxGeometry(.03,.002,.004),M('#111',{metalness:0}),hd,[-.014,.026,.05]);}
@@ -691,13 +691,16 @@ function g3LoadModel(){const g=G3;if(!g||g.fail||g.M||g.mLoading)return;const T3
   if(!T3.GLTFLoader){if(!g.ldr){g.ldr=1;const s=document.createElement('script');s.src='vendor/GLTFLoader-r128.js';s.onload=()=>g3LoadModel();s.onerror=()=>{g.mLoading=true;};document.head.appendChild(s);}return;}
   g.mLoading=true;const L=new T3.GLTFLoader(),get=f=>new Promise((ok,no)=>L.load('models/'+f+'.glb',ok,undefined,no));
   Promise.all([get('golfer'),...Object.values(G3M).map(c=>get(c.f))]).then(([gl,...an])=>{
-    const root=new T3.Group(),m=gl.scene;root.add(m);root.visible=false;g.scene.add(root);const shirt=[];
+    const root=new T3.Group(),m=gl.scene;root.add(m);root.visible=false;g.scene.add(root);const shirt=[],U={skin:{value:new T3.Color()},hair:{value:new T3.Color()}};
     m.traverse(o=>{if(!o.isMesh)return;o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false;const mt=o.material=o.material.clone();mt.roughness=Math.max(mt.roughness||0,.8);mt.metalness=0;
       if(/Hair|Eyelash/.test(o.name)){mt.transparent=false;mt.alphaTest=.45;}
+      // skin and hair tone are set per golfer: the skin keeps the texture's shading and features, re-toned; the hair takes a flat colour
+      if(/Body/.test(o.name))mt.onBeforeCompile=sh=>{sh.uniforms.uTone=U.skin;sh.fragmentShader='uniform vec3 uTone;\n'+sh.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\n{float l=dot(diffuseColor.rgb,vec3(.2126,.7152,.0722));diffuseColor.rgb=mix(diffuseColor.rgb,uTone*min(2.2,l/.164),.9);}');};
+      if(/Hair/.test(o.name))mt.onBeforeCompile=sh=>{sh.uniforms.uHair=U.hair;sh.fragmentShader='uniform vec3 uHair;\n'+sh.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\ndiffuseColor.rgb=uHair;');};
       if(/Shirt/.test(o.name))shirt.push(mt);if(/Shorts/.test(o.name))mt.color.set('#4a5260');});
     const mix=new T3.AnimationMixer(m),clips={};
     Object.keys(G3M).forEach((n,i)=>{const a=mix.clipAction(an[i].animations[0]);a.play();a.enabled=false;clips[n]=a;});
-    g.M={root,m,mix,clips,shirt,B:n=>m.getObjectByName('mixamorig'+n),cal:{}};}).catch(()=>{});}
+    g.M={root,m,mix,clips,shirt,U,B:n=>m.getObjectByName('mixamorig'+n),cal:{}};}).catch(()=>{});}
 function g3At(n,t){const M=G3.M;Object.keys(M.clips).forEach(x=>{M.clips[x].enabled=x===n;});M.clips[n].time=t;M.mix.update(0);M.root.updateMatrixWorld(true);}
 // the grip: between the two hands, a little along the fingers
 function g3Grip(){const M=G3.M,T3=G3.T3,w=n=>M.B(n).getWorldPosition(new T3.Vector3());return w('LeftHandMiddle1').add(w('RightHandMiddle1')).multiplyScalar(.5);}
@@ -709,12 +712,27 @@ function g3Cal(n,type){const M=G3.M,T3=G3.T3,c=G3M[n],L=G3CLUB[type].L,w=b=>M.B(
   const aim=grip.clone().addScaledVector(dir,R),ball=aim.clone().add(new T3.Vector3(0,0,type==='driver'?.055:.035));ball.y=type==='driver'?.05:.0215;const qa=qh();
   const keys=c.keys.map(([t,d])=>{g3At(n,t);const gp=g3Grip(),v=d==='ball'?aim.clone().sub(gp).normalize():new T3.Vector3(...d).normalize();return {t,l:v.applyQuaternion(qh().invert())};});
   return {off,ball,aim,grip,qa,keys,R};}
-function g3PoseModel(T,k,sh,col){const g=G3,M=g.M,T3=g.T3,P=g.P,n=k==='putt'?'Putt':k==='chip'?'Chip':'Drive',c=G3M[n],K=c.k;
+// how a golfer looks, by where he's from: a range of skin tones and hair colours per region, the pick fixed per golfer
+const G3LOOK={ea:[['#efcfb2','#e6c19f','#dcb38f'],['#14110f','#1b1612']],sea:[['#ddb08a','#cf9e76','#c08d63'],['#14110f','#1b1612']],sa:[['#c99a72','#b5845d','#9c6c48'],['#14110f','#1b1612']],
+  ne:[['#f4dccb','#efd2bd','#e6c4aa'],['#c9a66b','#a87e4c','#7a5634','#4e3826','#2e231b','#9c4a28']],se:[['#ebc6a6','#e0b693','#d4a683'],['#3a2a1e','#2a1f17','#1b1612','#5a4030']],
+  me:[['#dcb08b','#cc9c76','#b98862'],['#1b1612','#2a1f17']],af:[['#7a4c2e','#68401f','#8a5a3a','#553521'],['#0f0d0c','#16120f']],
+  la:[['#e6bf9c','#d2a47c','#bb8a63','#8f6043'],['#1b1612','#2a1f17','#3a2a1e']],mix:[['#f2d6c2','#e6c19f','#d2a47c','#b5845d','#8a5a3a','#6e4426'],['#c9a66b','#7a5634','#3a2a1e','#1b1612','#0f0d0c']]};
+const G3REG={JP:'ea',KR:'ea',CN:'ea',TW:'ea',HK:'ea',MN:'ea',TH:'sea',PH:'sea',VN:'sea',MY:'sea',ID:'sea',SG:'sea',IN:'sa',PK:'sa',BD:'sa',LK:'sa',NP:'sa',
+  SE:'ne',NO:'ne',DK:'ne',FI:'ne',IS:'ne',NL:'ne',DE:'ne',BE:'ne',ENG:'ne',SCO:'ne',WAL:'ne',IE:'ne',PL:'ne',CZ:'ne',AT:'ne',CH:'ne',RU:'ne',
+  ES:'se',IT:'se',FR:'se',PT:'se',GR:'se',EG:'me',DZ:'me',MA:'me',TN:'me',LY:'me',SA:'me',AE:'me',TR:'me',IL:'me',IR:'me',
+  MX:'la',AR:'la',CO:'la',CL:'la',PE:'la',VE:'la',PY:'la',UY:'la',BR:'mix',US:'mix',CA:'mix',AU:'mix',NZ:'mix',ZA:'mix'};
+const AFRICA='AO BJ BW BF BI CV CM CF TD KM CG CD CI DJ GQ ER SZ ET GA GM GH GN GW KE LS LR MG MW ML MR MU MZ NA NE NG RW ST SN SC SL SO SS SD TZ TG UG ZM ZW'.split(' ');
+function g3Look(who){const id=String(who&&who.id||''),reg=G3REG[who&&who.country]||(AFRICA.includes(who&&who.country)?'af':'mix'),L=G3LOOK[reg];let hs=7;for(const ch of id)hs=(hs*31+ch.charCodeAt(0))>>>0;
+  return {skin:L[0][hs%L[0].length],hair:L[1][(hs>>>8)%L[1].length]};}
+// two-bone reach: turn the forearm and upper arm so the palm lands on a point (the club's grip)
+function g3Reach(sd,tgt){const M=G3.M,T3=G3.T3,eff=M.B(sd+'HandMiddle1');for(let it=0;it<3;it++)for(const bn of ['ForeArm','Arm']){const b=M.B(sd+bn),bp=b.getWorldPosition(new T3.Vector3()),v1=eff.getWorldPosition(new T3.Vector3()).sub(bp).normalize(),v2=tgt.clone().sub(bp).normalize();
+  if(v1.dot(v2)>.99999)continue;const q=new T3.Quaternion().setFromUnitVectors(v1,v2),wq=b.getWorldQuaternion(new T3.Quaternion()),pq=b.parent.getWorldQuaternion(new T3.Quaternion());b.quaternion.copy(pq.invert().multiply(q.multiply(wq)));b.updateMatrixWorld(true);}}
+function g3PoseModel(T,k,sh,col,who){const g=G3,M=g.M,T3=g.T3,P=g.P,n=k==='putt'?'Putt':k==='chip'?'Chip':'Drive',c=G3M[n],K=c.k;
   const type=k==='putt'?'putter':k==='chip'?'wedge':/^Driver/i.test(sh.text||'')?'driver':isWood(sh)?'wood':/wedge|^PW|^SW|^LW|^GW/i.test(sh.text||'')?'wedge':'iron';
   const key=n+type,cal=M.cal[key]||(M.cal[key]=g3Cal(n,type));M.clubs=M.clubs||{};const club=M.clubs[type]||(M.clubs[type]=g3Club(type));
   Object.values(M.clubs).forEach(x=>{x.visible=x===club;});P.shaft.visible=P.clubHead.visible=false;
   const t=T<=.58?K[0]+(K[1]-K[0])*T/.58:T<=.75?K[1]+(K[2]-K[1])*(T-.58)/.17:K[2]+(K[3]-K[2])*Math.min(1,(T-.75)/.25);
-  M.root.rotation.set(0,c.ry,0);M.root.position.copy(cal.off);g3At(n,t);M.shirt.forEach(mt=>mt.color.set(col));
+  M.root.rotation.set(0,c.ry,0);M.root.position.copy(cal.off);g3At(n,t);M.shirt.forEach(mt=>mt.color.set(col));const lk=g3Look(who);M.U.skin.value.set(lk.skin).convertSRGBToLinear();M.U.hair.value.set(lk.hair).convertSRGBToLinear();
   const grip=g3Grip(),qh=M.B('LeftHand').getWorldQuaternion(new T3.Quaternion()),ks=cal.keys;let dir,org;
   if(k==='putt'){// a putter rides with the hands like a pendulum, low to the ground
     org=cal.aim.clone().addScaledVector(grip.clone().sub(cal.grip),1.25);org.y=Math.min(.14,Math.max(cal.aim.y,cal.aim.y+(grip.y-cal.grip.y)*1.25));dir=org.clone().sub(grip).normalize();}
@@ -726,13 +744,15 @@ function g3PoseModel(T,k,sh,col){const g=G3,M=g.M,T3=g.T3,P=g.P,n=k==='putt'?'Pu
   const f=new T3.Vector3(1,0,0).applyQuaternion(qh.clone().multiply(cal.qa.clone().invert())),sq=k==='putt'?1:Math.max(0,1-Math.min(Math.abs(T)/.25,Math.abs(T-.75)/.12));
   f.lerp(new T3.Vector3(1,0,0),sq);const Y=dir.clone().negate(),X=f.sub(Y.clone().multiplyScalar(f.dot(Y)));if(X.lengthSq()<1e-6)X.set(0,0,1);X.normalize();const Z=X.clone().cross(Y);
   club.quaternion.setFromRotationMatrix(new T3.Matrix4().makeBasis(X,Y,Z));club.position.copy(org);
+  // hands onto the grip: lead hand above, trail hand just below it
+  g3Reach('Left',grip.clone().addScaledVector(dir,-.045));g3Reach('Right',grip.clone().addScaledVector(dir,.045));M.root.updateMatrixWorld(true);
   if(!M.tee){M.tee=new T3.Mesh(new T3.CylinderGeometry(.004,.0015,.045,8),new T3.MeshStandardMaterial({color:'#f3f0e6',roughness:.6}));M.tee.castShadow=true;g.scene.add(M.tee);}
   M.tee.visible=type==='driver';M.tee.position.set(cal.ball.x,.0175,cal.ball.z);
   const b=cal.ball;if(T<.75){P.ballM.position.copy(b);P.ballM.visible=true;}else{const q=Math.min(1,(T-.75)/.12);P.ballM.position.set(b.x+q*(k==='putt'?.8:3),b.y+q*(k==='putt'?0:k==='full'?2.2:.8),b.z-q*1.5);P.ballM.visible=q<1;}}
 // render the 3D swing into a panel; returns false if 3D isn't available (the flat drawing is used instead)
-function drawSwing3D(c,x,y,w,h,u,sh,T,col){loadThree();const g=g3Init();if(!g||g.fail)return false;
+function drawSwing3D(c,x,y,w,h,u,sh,T,col,who){loadThree();const g=g3Init();if(!g||g.fail)return false;
   g3LoadModel();const real=!!g.M;Object.keys(g.P).forEach(n=>{if(!/^(shaft|clubHead|ballM)$/.test(n))g.P[n].visible=!real;});
-  if(real){g.M.root.visible=true;g3PoseModel(T,sh.k,sh,col);}else{g.P.shaft.visible=g.P.clubHead.visible=true;g3Pose(T,sh.k,isWood(sh),col);}g.rd.render(g.scene,g.cam);
+  if(real){g.M.root.visible=true;g3PoseModel(T,sh.k,sh,col,who);}else{g.P.shaft.visible=g.P.clubHead.visible=true;g3Pose(T,sh.k,isWood(sh),col);}g.rd.render(g.scene,g.cam);
   c.save();c.beginPath();if(c.roundRect)c.roundRect(x,y,w,h,u*.5);else c.rect(x,y,w,h);c.clip();
   const sw=g.cv.width,shh=g.cv.height,s=Math.max(w/sw,h/shh);c.drawImage(g.cv,x+(w-sw*s)/2,y+(h-shh*s)/2,sw*s,shh*s);c.restore();
   c.save();c.strokeStyle='rgba(255,255,255,.25)';c.lineWidth=1;c.beginPath();if(c.roundRect)c.roundRect(x,y,w,h,u*.5);else c.rect(x,y,w,h);c.stroke();
@@ -757,8 +777,8 @@ function drawFaceMap(c,x,y,w,h,u,sh,show){if(!sh.q||sh.k==='putt'||sh.k==='drop'
   const tag=strikeTag(q),good=q[2]>=80,ok=q[2]>=60;c.font=`700 ${Math.round(u*1.05)}px 'Barlow Condensed','Arial Narrow',sans-serif`;c.textAlign='center';c.textBaseline='alphabetic';
   c.fillStyle=good?'#7ee08f':ok?'#f2c84b':'#f08a6c';c.fillText(`${tag.toUpperCase()} · ${q[2]}`,cx,y+h-u*.45);}
 // both panels for the shot being played: swing camera bottom left, strike map bottom right
-function drawShotPanels(c,W,H,u,sh,P,live,col){if(!sh||sh.k==='drop'||sh.k==='pick')return;const pw=Math.min(W*.28,H*.23),sw=Math.min(W*.34,H*.27),T=swingT(P,live);
-  drawSwingCam(c,u*.5,H-sw*1.25-u*.5,sw,sw*1.25,u,sh,T,col);
+function drawShotPanels(c,W,H,u,sh,P,live,col,who){if(!sh||sh.k==='drop'||sh.k==='pick')return;const pw=Math.min(W*.28,H*.23),sw=Math.min(W*.34,H*.27),T=swingT(P,live);
+  drawSwingCam(c,u*.5,H-sw*1.25-u*.5,sw,sw*1.25,u,sh,T,col,who);
   drawFaceMap(c,W-pw-u*.5,H-pw*.95-u*.5,pw,pw*.95,u,sh,!live||P.f>0);}
 function drawFlag(c,px,py,u){c.strokeStyle='#10201a';c.lineWidth=Math.max(1.5,u*.14);c.beginPath();c.moveTo(px,py);c.lineTo(px,py-u*2.2);c.stroke();
   c.fillStyle='#e3b420';c.beginPath();c.moveTo(px,py-u*2.2);c.lineTo(px+u*1.3,py-u*1.75);c.lineTo(px,py-u*1.3);c.fill();}
@@ -779,7 +799,7 @@ function drawMap(dt){
   const wg=(D.golfers.find(g=>g.id===ui.watch)||(ui.board&&(ui.board.players||[]).find(p=>p.id===ui.watch))||{}),gcol=COLORS[wg.color]||'#c2362a';
   for(const s of A.trail)drawTracer(c,X,Y,Sc,H,u,s,1,gcol,false);
   if(moving){drawTracer(c,X,Y,Sc,H,u,sh,e,gcol,true);drawGolfer(c,X,Y,u,sh,swingT(P,true),gcol,P.f<.35?1:Math.max(0,1-(P.f-.35)/.3));}
-  A.panel={sh,P,live:moving,col:gcol,u};
+  A.panel={sh,P,live:moving,col:gcol,u,who:wg};
   if(sunk){if(hw<1){c.fillStyle=`rgba(255,255,255,${Math.min(1,2.2*(1-hw))})`;c.font=`700 ${Math.round(u*1.5)}px 'Barlow Condensed','Arial Narrow',sans-serif`;c.textAlign='center';
       c.strokeStyle=`rgba(16,32,26,${Math.min(1,2.2*(1-hw))})`;c.lineWidth=u*.3;const ty=Math.max(u*2,py-u*3.4-hw*u);c.strokeText('IN THE HOLE',px,ty);c.fillText('IN THE HOLE',px,ty);}
     return;}
@@ -1093,7 +1113,7 @@ function mFrame(ts){const M=ui.ma,cv=document.getElementById('mcv');if(ui.view!=
     else if(M.phase==='wait'){M.w+=dt;if(M.w>mWait(q.sh)){M.si++;if(M.si>=M.seq.length){M.si=M.seq.length-1;mEndHole();}else{M.phase='shot';M.t=0;}}}
     else if(M.phase==='post'){M.w+=dt;if(M.w>1700){M.phase='idle';if(M.live)mpSync();}}}
   else if(M.phase==='post'){M.w+=dt;if(M.w>1700){M.phase='idle';if(M.live)mpSync();}}
-  mDraw(dt);if(M.panel){const q=M.panel;drawShotPanels(cv.getContext('2d'),cv.width,cv.height,q.u,q.sh,q.P,q.live,q.col);}requestAnimationFrame(mFrame);}
+  mDraw(dt);if(M.panel){const q=M.panel;drawShotPanels(cv.getContext('2d'),cv.width,cv.height,q.u,q.sh,q.P,q.live,q.col,q.who);}requestAnimationFrame(mFrame);}
 function mDraw(dt){const M=ui.ma,cv=document.getElementById('mcv');if(!cv||!M.h)return;const c=cv.getContext('2d'),W=cv.width,H=cv.height,h=M.h;
   const q=M.seq&&M.seq.length?M.seq[Math.min(M.si,M.seq.length-1)]:null,moving=!!q&&M.phase==='shot',P=moving?shotPhase(q.sh,M.t):{sw:1,f:1},ez=1-Math.pow(1-P.f,2.2);
   const focus=q?(moving?q.sh.from:q.sh.to):[0,0],nearG=M.pos?M.pos.every((pp,p)=>M.holed[p]||dist(pp,h.green)<=52)&&dist(focus,h.green)<=52:false;
@@ -1104,7 +1124,8 @@ function mDraw(dt){const M=ui.ma,cv=document.getElementById('mcv');if(!cv||!M.h)
   // each golfer's earlier shots as faint arcs in his side's colour; the shot in the air glows, with the golfer swinging at it
   if(M.trail)M.trail.forEach((tr,p)=>{for(const s of tr)drawTracer(c,X,Y,Sc,H,u,s,1,MPC[M.balls[p].side],false);});
   let ball=null;if(moving&&q.sh.k!=='drop'&&q.sh.k!=='pick'){ball=shotAt(q.sh,ez);drawTracer(c,X,Y,Sc,H,u,q.sh,ez,MPC[q.side],true);drawGolfer(c,X,Y,u,q.sh,swingT(P,true),MPC[q.side],P.f<.35?1:Math.max(0,1-(P.f-.35)/.3));}
-  M.panel=q&&(M.phase==='shot'||M.phase==='wait')?{sh:q.sh,P,live:moving,col:MPC[q.side],u}:null;
+  let who=null;if(q){const b=ui.mpb,x=b&&mpGet(b,M.key),pid=x&&(q.side?x.b:x.a),pp=b&&pid&&b.players[pid];who=pp&&pp.team?(pp.members||[])[(M.balls[q.p]||{}).mem]:pp?Object.assign({id:pid},pp):null;}
+  M.panel=q&&(M.phase==='shot'||M.phase==='wait')?{sh:q.sh,P,live:moving,col:MPC[q.side],u,who}:null;
   if(!M.pos)return;
   for(let p=0;p<M.pos.length;p++){if(M.holed[p]&&!(moving&&q.p===p))continue;const at=moving&&q.p===p?(ball||q.sh.from):M.pos[p];
     const lift=moving&&q.p===p?shotLift(q.sh,ez,Sc,H):0,air=lift?lift/Math.max(1,H*.13):0;
