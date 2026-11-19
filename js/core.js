@@ -178,15 +178,21 @@ function swing(g,e,from,target,lie,wind,mc){
   else{type='m';aS=c5(sk.iacc+e.m);dS=c5(sk.idist+e.m);wS=sk.iwind;}
   const wk=1.6-wS*.012,wf=1+wind.mph/50*wk;
   const aSd=(type==='l'?7.6-.056*aS:6.4-.048*aS)*lf*wf,dSd=(type==='l'?.07-.0004*dS:.075-.0005*dS)*lf;
-  let ang=gauss()*aSd,df=1+gauss()*dSd,mis=null;
+  const gA=gauss(),gD=gauss();let ang=gA*aSd,df=1+gD*dSd,mis=null;
   if(!mc){const pm=clamp((.065-.0005*aS)*lf+(e.mood<0?-e.mood*.04:0),.005,.25);
     if(R()<pm){if(R()<.5){df*=.5+R()*.3;mis='chunk';}else{ang=(R()<.5?-1:1)*(aSd*2.2+4+R()*5);mis='wild';}}}
   const ux=(target[0]-from[0])/L,uy=(target[1]-from[1])/L,wx=Math.sin(wind.dir)*wind.mph,wy=Math.cos(wind.dir)*wind.mph;
   const tail=wx*ux+wy*uy,cross=wx*uy-wy*ux;let lat=0;
   if(L>60){df*=1+tail*.0014*wk;lat=cross*.0016*L*wk;}
   const a=ang*Math.PI/180,c=Math.cos(a),s=Math.sin(a),vx=ux*c+uy*s,vy=uy*c-ux*s,LL=L*df;
-  return{p:[from[0]+vx*LL+uy*lat,from[1]+vy*LL-ux*lat],type,mis,L};
+  return{p:[from[0]+vx*LL+uy*lat,from[1]+vy*LL-ux*lat],type,mis,L,q:strikeQ(gA,gD,mis,ang)};
 }
+/* Where on the clubface the ball was struck, for the shot viewer: [x heel(-1) to toe(+1), y low(-1) to high(+1), quality 0-100, 'f' fat / 'w' wild / ''].
+   Made from the same random draws as the shot, so it changes nothing about how the shot plays. */
+function strikeQ(z,dz,mis,ang){const r2=v=>Math.round(v*100)/100;
+  if(mis==='chunk')return[r2(clamp(z/3,-.4,.4)),-.82,18,'f'];
+  if(mis==='wild')return[ang>0?.92:-.92,r2(clamp(dz/3,-.4,.4)),12,'w'];
+  return[r2(clamp(z/2.6,-1,1)*.85),r2(clamp(dz/2.6,-1,1)*.85),Math.round(clamp(100-22*Math.hypot(z,dz),20,100)),''];}
 function puttExp(ft){return ft<3?1.04:2-1/(1+Math.pow(ft/7,2.2))+ft*.002}
 function cost(h,p,risk){
   const lie=lieAt(h,p),d=dist(p,h.pin);
@@ -220,8 +226,8 @@ function chip(g,e,from,h,lie){
   const d=dist(from,h.pin),sk=c5((lie==='sand'?g.sk.bunker:d>20?g.sk.pitch:g.sk.chip)+e.s),lf={sand:1.7,rough:1.3,trees:1.6}[lie]||1;
   if(R()<(.045-.0004*sk)*lf+(e.mood<0?-e.mood*.03:0))return{p:lerp(from,h.pin,.35+R()*.25),mis:'chunk'};
   if(R()<(.004+sk*.00025)*(d<25?1:.5)/lf)return{holed:true};
-  const r=Math.abs(gauss())*d*(.2-.0014*sk)*lf+.25,a=R()*6.283;
-  return{p:[h.pin[0]+Math.cos(a)*r,h.pin[1]+Math.sin(a)*r]};
+  const gz=gauss(),r=Math.abs(gz)*d*(.2-.0014*sk)*lf+.25,a=R()*6.283;
+  return{p:[h.pin[0]+Math.cos(a)*r,h.pin[1]+Math.sin(a)*r],q:[Math.round(clamp(Math.cos(a)*Math.abs(gz)/2.6,-1,1)*70)/100,Math.round(clamp(Math.sin(a)*Math.abs(gz)/2.6,-1,1)*70)/100,Math.round(clamp(100-24*Math.abs(gz),25,100)),'']};
 }
 function putt(g,e,ft){
   const sp=c5(g.sk.sputt+e.s),lp=c5(g.sk.lputt+e.s),w=clamp((ft-8)/12,0,1),sk=sp*(1-w)+lp*w;
@@ -262,24 +268,24 @@ function playHole(g,st,h,ctx){
       const a=R()*6.283,np=[h.pin[0]+Math.cos(a)*left/3,h.pin[1]+Math.sin(a)*left/3];
       shots.push({k:'putt',from:pos,to:np,text:`Putt from ${Math.round(ft)} feet stays out. ${Math.round(left)<=1?'A foot':Math.round(left)+' feet'} left.`});pos=np;continue;
     }
-    let land,text,kind;
+    let land,text,kind,sq;
     if(d<=45&&lie!=='tee'){
       const c=chip(g,e,pos,h,lie);n++;kind='chip';
-      if(c.holed){shots.push({k:'chip',from:pos,to:h.pin,holed:true,text:lie==='sand'?'Holes the bunker shot!':'Chips in!'});holeOut=true;break;}
-      land=c.p;const nl=lieAt(h,land),ft=Math.round(dist(land,h.pin)*3);
+      if(c.holed){shots.push({k:'chip',from:pos,to:h.pin,holed:true,q:[0,0,99,''],text:lie==='sand'?'Holes the bunker shot!':'Chips in!'});holeOut=true;break;}
+      land=c.p;sq=c.mis?[0,-.8,20,'f']:c.q;const nl=lieAt(h,land),ft=Math.round(dist(land,h.pin)*3);
       text=c.mis?'Chunks it. Still short.':nl==='green'?(lie==='sand'?`Splashes out to ${ft} feet.`:d>20?`Pitches to ${ft} feet.`:`Chips to ${ft} feet.`):nl==='water'?'Skulls it into the water.':`Chip runs through into the ${nl==='sand'?'bunker':nl}.`;
     }else{
       const t=chooseTarget(g,e,h,pos,lie,w,st,ctx),sw=swing(g,e,pos,t,lie,w);n++;kind='full';land=sw.p;
-      if(dist(land,h.pin)<.35){shots.push({k:'full',from:pos,to:h.pin,holed:true,text:`${clubName(g,sw.L,lie)} from ${Math.round(d)} yards. It's in the hole!`});holeOut=true;break;}
-      text=fullText(g,h,pos,lie,land,lieAt(h,land),sw.mis,sw.L);
+      if(dist(land,h.pin)<.35){shots.push({k:'full',from:pos,to:h.pin,holed:true,q:sw.q,text:`${clubName(g,sw.L,lie)} from ${Math.round(d)} yards. It's in the hole!`});holeOut=true;break;}
+      sq=sw.q;text=fullText(g,h,pos,lie,land,lieAt(h,land),sw.mis,sw.L);
     }
     let nl=lieAt(h,land);
     if(nl==='water'){
-      shots.push({k:kind,from:pos,to:land,text});n++;wet++;
+      shots.push({k:kind,from:pos,to:land,text,q:sq});n++;wet++;
       let drop=pos;for(let t=1;t>=0;t-=.02){const q=lerp(pos,land,t);if(lieAt(h,q)!=='water'){drop=lerp(pos,land,Math.max(0,t-.02));if(lieAt(h,drop)==='water')drop=q;break;}}
       nl=lieAt(h,drop);shots.push({k:'drop',from:land,to:drop,text:'Takes a penalty drop.'});pos=drop;lie=nl==='water'?'rough':nl;continue;
     }
-    shots.push({k:kind,from:pos,to:land,text});pos=land;lie=nl;
+    shots.push({k:kind,from:pos,to:land,text,q:sq});pos=land;lie=nl;
   }
   return{score:n,shots,putts,wet,holeOut};
 }

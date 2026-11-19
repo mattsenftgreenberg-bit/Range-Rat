@@ -424,7 +424,7 @@ function frame(ts){const A=ui.anim;if(ui.view!=='board'||!ui.watch||!A||!documen
     if(A.phase==='shot'){const sh=A.cur.shots[A.si];A.t+=dt/shotDur(sh);if(A.t>=1){A.t=1;feedA(sh.holed?holedFor(sh.text,(watchScores()[A.cur.round]||[])[A.cur.hole],A.h.par):sh.text);A.trail.push(sh);A.phase='wait';A.w=0;}}
     else if(A.phase==='wait'){A.w+=dt;if(A.w>(A.cur.shots[A.si].holed?1000:750)){A.si++;if(A.si>=A.cur.shots.length){A.si=A.cur.shots.length-1;endHoleA();}else{A.phase='shot';A.t=0;}}}
     else if(A.phase==='post'){A.w+=dt;if(A.w>1700){A.phase='idle';if(A.live)syncAnim();}}
-    drawMap(dt);
+    A.panel=null;drawMap(dt);const cvp=document.getElementById('cv');if(A.panel&&cvp&&(A.phase==='shot'||A.phase==='wait')){const q=A.panel;drawShotPanels(cvp.getContext('2d'),cvp.width,cvp.height,q.u,q.sh,q.P,q.live,q.col);}
   }
   requestAnimationFrame(frame);}
 /* ---------- the hole map: shapes, tracers and the golfer ---------- */
@@ -493,19 +493,91 @@ function drawTracer(c,X,Y,Sc,H,u,sh,f,col,live){if(sh.k==='drop'||sh.k==='pick'|
   c.strokeStyle=live?'rgba(255,255,255,.9)':'rgba(16,32,26,.35)';c.lineWidth=live?Math.max(2.4,u*.3):Math.max(2,u*.26);c.stroke();
   c.strokeStyle=col;c.globalAlpha=live?1:.7;c.lineWidth=live?Math.max(1.4,u*.16):Math.max(1.2,u*.14);c.stroke();c.globalAlpha=1;
   if(live)c.restore();}
-// a little golfer seen from above, in his colours, standing beside the ball and swinging at it.
-// sw: 0 address, up to .62 backswing, .62-.78 the strike, then the follow-through; fade: 1 solid down to 0 gone
-function drawGolfer(c,X,Y,u,sh,sw,col,fade){if(fade<=0||sh.k==='drop'||sh.k==='pick')return;const dx=sh.to[0]-sh.from[0],dy=sh.to[1]-sh.from[1],a=Math.atan2(-dy,dx);
-  const bx=X(sh.from[0]),by=Y(sh.from[1]),s=u*1.9,nx=Math.cos(a),ny=Math.sin(a),px=-ny,py=nx;
-  const gx=bx+px*s*.8,gy=by+py*s*.8;c.save();c.globalAlpha=fade;
-  const amp=sh.k==='putt'?.35:sh.k==='chip'?.9:1.9,sw2=sw<.62?-(sw/.62)*amp:sw<.78?-amp+((sw-.62)/.16)*(amp*1.7):amp*.7+Math.min(1,(sw-.78)/.22)*amp*.25;
-  const ca=Math.atan2(by-gy,bx-gx)+sw2,cl=s*(sh.k==='putt'?1.25:1.55);
-  c.fillStyle='rgba(0,0,0,.25)';c.beginPath();c.ellipse(gx+s*.18,gy+s*.18,s*.62,s*.42,a,0,6.3);c.fill();
-  c.strokeStyle='#1d1d1d';c.lineWidth=Math.max(1.2,s*.12);c.beginPath();c.moveTo(gx,gy);c.lineTo(gx+Math.cos(ca)*cl,gy+Math.sin(ca)*cl);c.stroke();
-  c.fillStyle='#d9d9d9';c.beginPath();c.arc(gx+Math.cos(ca)*cl,gy+Math.sin(ca)*cl,Math.max(1.2,s*.13),0,6.3);c.fill();
-  c.fillStyle=col;c.strokeStyle='rgba(16,32,26,.8)';c.lineWidth=Math.max(1,s*.08);c.beginPath();c.ellipse(gx,gy,s*.36,s*.56,a+Math.PI/2+sw2*.25,0,6.3);c.fill();c.stroke();
-  c.fillStyle='#f1d3b3';c.beginPath();c.arc(gx,gy,s*.25,0,6.3);c.fill();c.fillStyle='#1d1d1d';c.beginPath();c.arc(gx,gy,s*.25,a-Math.PI*.9,a+Math.PI*.9,true);c.fill();
+// ----- the swing: one timeline T from 0 (address) through the top (.58) to impact (.75) and the finish (1) -----
+// keyframes: A = lead arm angle from straight down (positive = back, away from the target), W = wrist hinge,
+// X = hips sliding (negative back, positive toward the target), U = shoulder turn (0-1), Hl = trail heel up (0-1)
+const SWING={full:[[0,0,0,0,0,0],[.2,38,8,-1,.25,0],[.45,118,78,-3,.8,0],[.58,152,96,-3,1,0],[.62,146,98,-1,.95,0],[.7,62,96,3,.45,0],[.75,0,4,4,0,.2],[.83,-85,-15,6,-.5,.6],[.93,-195,-95,7,-1,1],[1,-205,-108,7,-1,1]],
+  chip:[[0,0,0,0,0,0],[.3,30,18,0,.2,0],[.58,62,42,-1,.45,0],[.66,52,40,0,.35,0],[.75,0,0,1,0,0],[.88,-45,-10,2,-.35,.1],[1,-62,-18,2,-.45,.15]],
+  putt:[[0,0,0,0,0,0],[.58,20,0,0,.08,0],[.75,0,0,0,0,0],[1,-24,0,0,-.08,0]]};
+function swingPose(T,k){const K=SWING[k==='full'?'full':k==='putt'?'putt':'chip'];let i=0;while(i<K.length-2&&T>K[i+1][0])i++;
+  const a=K[i],b=K[i+1],u=Math.max(0,Math.min(1,(T-a[0])/(b[0]-a[0]))),e=u*u*(3-2*u),L=j=>a[j]+(b[j]-a[j])*e;return {A:L(1),W:L(2),X:L(3),U:L(4),Hl:L(5)};}
+// where a shot is on that timeline: the backswing and downswing take the swing time, the follow-through runs on as the ball leaves
+const swingT=(P,live)=>!live?1:P.f<=0?P.sw*.75:.75+Math.min(1,P.f*3)*.25;
+const isWood=sh=>/^(Driver|\d-wood|Hybrid)/i.test(sh.text||'');
+// the golfer from above, standing beside the ball: feet, hips and shoulders turning, arms and club swinging round him
+function drawGolfer(c,X,Y,u,sh,T,col,fade){if(fade<=0||sh.k==='drop'||sh.k==='pick')return;
+  const dx=sh.to[0]-sh.from[0],dy=sh.to[1]-sh.from[1],a=Math.atan2(-dy,dx),P=swingPose(T,sh.k);
+  const bx=X(sh.from[0]),by=Y(sh.from[1]),s=u*1.9,tx=Math.cos(a),ty=Math.sin(a),fx=-ty,fy=tx; // t: toward the target, f: from the golfer toward the ball
+  const gx=bx-fx*s*.85+tx*P.X*s*.03,gy=by-fy*s*.85+ty*P.X*s*.03;c.save();c.globalAlpha=fade;
+  const rot=(v,ang)=>[v[0]*Math.cos(ang)-v[1]*Math.sin(ang),v[0]*Math.sin(ang)+v[1]*Math.cos(ang)],turn=P.U*1.45;
+  // shadow and feet
+  c.fillStyle='rgba(0,0,0,.25)';c.beginPath();c.ellipse(gx+s*.15,gy+s*.2,s*.62,s*.5,a,0,6.3);c.fill();
+  c.fillStyle='#222';for(const sd of [-1,1]){c.beginPath();c.ellipse(gx+tx*sd*s*.32+fx*s*.12,gy+ty*sd*s*.32+fy*s*.12,s*.15,s*.09,a+Math.PI/2*.15,0,6.3);c.fill();}
+  // hips (trousers) then shoulders (shirt), each turned by the swing
+  const hp=rot([tx,ty],-turn*.45),sp=rot([tx,ty],-turn);
+  c.strokeStyle='#2d3436';c.lineWidth=s*.34;c.lineCap='round';c.beginPath();c.moveTo(gx-hp[0]*s*.26,gy-hp[1]*s*.26);c.lineTo(gx+hp[0]*s*.26,gy+hp[1]*s*.26);c.stroke();
+  c.strokeStyle=col;c.lineWidth=s*.4;c.beginPath();c.moveTo(gx-sp[0]*s*.36,gy-sp[1]*s*.36);c.lineTo(gx+sp[0]*s*.36,gy+sp[1]*s*.36);c.stroke();
+  // arms and club: they hang toward the ball at address and swing round the body
+  const swingAng=-(P.A+P.W*.5)*Math.PI/180*.8,lift=Math.min(.8,Math.abs(P.A)/220),dir=rot([fx,fy],swingAng);
+  const hx=gx+dir[0]*s*.55*(1-lift*.4),hy=gy+dir[1]*s*.55*(1-lift*.4),cd=rot(dir,-P.W*Math.PI/180*.6),cl=s*(sh.k==='putt'?.75:isWood(sh)?1.3:1.1)*(1-lift*.55);
+  c.strokeStyle='#e5c09b';c.lineWidth=s*.12;for(const sd of [-1,1]){c.beginPath();c.moveTo(gx+sp[0]*sd*s*.3,gy+sp[1]*sd*s*.3);c.lineTo(hx,hy);c.stroke();}
+  c.strokeStyle='#bfc5c9';c.lineWidth=Math.max(1,s*.06);c.beginPath();c.moveTo(hx,hy);c.lineTo(hx+cd[0]*cl,hy+cd[1]*cl);c.stroke();
+  c.fillStyle='#3a3f44';c.beginPath();c.arc(hx+cd[0]*cl,hy+cd[1]*cl,Math.max(1.3,s*.09),0,6.3);c.fill();
+  // head with a cap, peak pointing at the ball
+  c.fillStyle='#e5c09b';c.beginPath();c.arc(gx,gy,s*.2,0,6.3);c.fill();
+  c.fillStyle='#f4f4f4';c.beginPath();c.arc(gx,gy,s*.2,a+Math.PI*.15,a+Math.PI*1.85,true);c.fill();
   c.restore();}
+// a panel in a corner of the map: dark glass with a small heading
+function panel(c,x,y,w,h,title,u){c.save();c.fillStyle='rgba(12,22,17,.72)';c.strokeStyle='rgba(255,255,255,.18)';c.lineWidth=1;c.beginPath();if(c.roundRect)c.roundRect(x,y,w,h,u*.5);else c.rect(x,y,w,h);c.fill();c.stroke();
+  c.fillStyle='rgba(255,255,255,.7)';c.font=`600 ${Math.round(u*.85)}px 'Barlow Condensed','Arial Narrow',sans-serif`;c.textAlign='left';c.textBaseline='top';c.fillText(title,x+u*.5,y+u*.35);c.restore();}
+// the swing camera: the golfer side-on (facing us), the full swing from address to the finish
+function drawSwingCam(c,x,y,w,h,u,sh,T,col){if(sh.k==='drop'||sh.k==='pick')return;panel(c,x,y,w,h,'SWING',u);
+  const P=swingPose(T,sh.k),k=h/118,gy=y+h-8*k,cx=x+w*.5,rad=v=>v*Math.PI/180;
+  c.save();c.beginPath();c.rect(x,y,w,h);c.clip();c.lineCap='round';c.lineJoin='round';
+  c.strokeStyle='rgba(140,196,116,.6)';c.lineWidth=2*k;c.beginPath();c.moveTo(x+4*k,gy);c.lineTo(x+w-4*k,gy);c.stroke();
+  const hipX=cx+P.X*k,hipY=gy-44*k,shX=hipX-4*k*(1-Math.abs(P.U)*.3),shY=gy-74*k,sw=13*k*(1-Math.abs(P.U)*.55);
+  // legs: trail (screen left) and lead, trail heel lifting through the finish
+  c.strokeStyle='#2d3436';c.lineWidth=7*k;
+  c.beginPath();c.moveTo(hipX-5*k,hipY);c.lineTo(cx-11*k+P.Hl*4*k,gy-20*k);c.lineTo(cx-14*k+P.Hl*6*k,gy-P.Hl*6*k);c.stroke();
+  c.beginPath();c.moveTo(hipX+5*k,hipY);c.lineTo(cx+12*k,gy-21*k);c.lineTo(cx+14*k,gy);c.stroke();
+  c.fillStyle='#222';c.beginPath();c.ellipse(cx-14*k+P.Hl*6*k,gy-P.Hl*6*k,5*k,2.2*k,P.Hl*.6,0,6.3);c.fill();c.beginPath();c.ellipse(cx+15*k,gy,5*k,2.2*k,0,0,6.3);c.fill();
+  // body: hips to shoulders in the shirt colour
+  c.strokeStyle=col;c.lineWidth=15*k;c.beginPath();c.moveTo(hipX,hipY-3*k);c.lineTo(shX,shY+5*k);c.stroke();
+  c.lineWidth=8*k;c.beginPath();c.moveTo(shX-sw,shY);c.lineTo(shX+sw,shY);c.stroke();
+  // head and cap, eyes down on the ball until after impact
+  const hdX=shX-2*k+(T>.8?3*k:0),hdY=shY-12*k;c.fillStyle='#e5c09b';c.beginPath();c.arc(hdX,hdY,7*k,0,6.3);c.fill();
+  c.fillStyle='#f4f4f4';c.beginPath();c.arc(hdX,hdY-1.5*k,7.2*k,Math.PI*1.02,Math.PI*1.98);c.fill();c.fillRect(hdX-(T>.8?-2:9)*k,hdY-2.5*k,7*k,2*k);
+  // arms from the shoulders to the hands, then the club, hinging at the wrists
+  const La=31*k,A=rad(P.A),hx=shX-Math.sin(A)*La,hy=shY+Math.cos(A)*La;
+  c.strokeStyle='#e5c09b';c.lineWidth=4.5*k;c.beginPath();c.moveTo(shX-sw*.7,shY+1*k);c.lineTo(hx,hy);c.moveTo(shX+sw*.7,shY+1*k);c.lineTo(hx,hy);c.stroke();
+  const Lc=(sh.k==='putt'?30:isWood(sh)?46:40)*k,C=rad(P.A+P.W),chx=hx-Math.sin(C)*Lc,chy=hy+Math.cos(C)*Lc;
+  c.strokeStyle='#cfd5d9';c.lineWidth=1.8*k;c.beginPath();c.moveTo(hx,hy);c.lineTo(chx,chy);c.stroke();
+  c.fillStyle='#3a3f44';c.beginPath();c.ellipse(chx,chy,(isWood(sh)?5:3.5)*k,2.6*k,C,0,6.3);c.fill();
+  // the ball, sitting at address and gone after impact
+  if(T<.75){c.fillStyle='#fff';c.beginPath();c.arc(shX+1*k,gy-2.2*k,2.2*k,0,6.3);c.fill();}
+  else if(T<.9&&sh.k!=='putt'){const q=(T-.75)/.15;c.fillStyle='#fff';c.beginPath();c.arc(shX+1*k+q*w*.5,gy-2.2*k-q*h*(sh.k==='full'?.7:.3),2*k*(1-q*.4),0,6.3);c.fill();}
+  c.restore();}
+// how the strike felt, in words, from where it hit the face
+function strikeTag(q){const [x,y,r,f]=q;if(f==='f')return 'Fat';if(f==='w')return x>0?'Off the toe':'Shank';if(r>=92)return 'Pure';if(r>=80)return 'Flush';if(r>=65)return 'Solid';
+  return Math.abs(x)>=Math.abs(y)?(x>0?'Off the toe':'Off the heel'):(y<0?'Thin':'High on the face');}
+// the clubface heat map: the sweet spot glows green, cooling through yellow to red at the edges; the white mark is where it hit
+function drawFaceMap(c,x,y,w,h,u,sh,show){if(!sh.q||sh.k==='putt'||sh.k==='drop'||sh.k==='pick')return;panel(c,x,y,w,h,'STRIKE',u);if(!show)return;
+  const q=sh.q,wood=sh.k==='full'&&isWood(sh),fw=w*.78,fh=h*(wood?.42:.36),cx=x+w/2,cy=y+h*.48;
+  c.save();c.beginPath();
+  if(wood){c.ellipse(cx,cy,fw/2,fh/2,0,0,6.3);}
+  else{const l=cx-fw/2,r=cx+fw/2,t=cy-fh/2,b=cy+fh/2;c.moveTo(l+fh*.25,b);c.lineTo(r-fh*.15,b);c.quadraticCurveTo(r,b,r,b-fh*.25);c.lineTo(r-fh*.1,t+fh*.05);c.quadraticCurveTo(r-fh*.2,t-fh*.08,r-fh*.5,t);c.lineTo(l+fh*.2,t+fh*.32);c.quadraticCurveTo(l,t+fh*.4,l,b-fh*.2);c.quadraticCurveTo(l,b,l+fh*.25,b);c.closePath();}
+  const g=c.createRadialGradient(cx,cy,0,cx,cy,fw*.55);g.addColorStop(0,'#2fb36b');g.addColorStop(.28,'#9bd14e');g.addColorStop(.5,'#f2c84b');g.addColorStop(.75,'#f08a3c');g.addColorStop(1,'#d64533');
+  c.fillStyle=g;c.fill();c.strokeStyle='rgba(255,255,255,.55)';c.lineWidth=1.2;c.stroke();c.clip();
+  if(!wood){c.strokeStyle='rgba(0,0,0,.18)';c.lineWidth=1;for(let i=-3;i<=3;i++){c.beginPath();c.moveTo(cx-fw*.4,cy+i*fh*.12);c.lineTo(cx+fw*.4,cy+i*fh*.12);c.stroke();}}
+  c.restore();
+  const mx=cx+q[0]*fw*.46,my=cy-q[1]*fh*.46,mr=Math.max(3,u*.42);
+  c.fillStyle='rgba(255,255,255,.95)';c.strokeStyle='#10201a';c.lineWidth=1.5;c.beginPath();c.arc(mx,my,mr,0,6.3);c.fill();c.stroke();
+  const tag=strikeTag(q),good=q[2]>=80,ok=q[2]>=60;c.font=`700 ${Math.round(u*1.05)}px 'Barlow Condensed','Arial Narrow',sans-serif`;c.textAlign='center';c.textBaseline='alphabetic';
+  c.fillStyle=good?'#7ee08f':ok?'#f2c84b':'#f08a6c';c.fillText(`${tag.toUpperCase()} · ${q[2]}`,cx,y+h-u*.45);}
+// both panels for the shot being played: swing camera bottom left, strike map bottom right
+function drawShotPanels(c,W,H,u,sh,P,live,col){if(!sh||sh.k==='drop'||sh.k==='pick')return;const pw=Math.min(W*.28,H*.23),T=swingT(P,live);
+  drawSwingCam(c,u*.5,H-pw*1.18-u*.5,pw,pw*1.18,u,sh,T,col);
+  drawFaceMap(c,W-pw-u*.5,H-pw*.95-u*.5,pw,pw*.95,u,sh,!live||P.f>0);}
 function drawFlag(c,px,py,u){c.strokeStyle='#10201a';c.lineWidth=Math.max(1.5,u*.14);c.beginPath();c.moveTo(px,py);c.lineTo(px,py-u*2.2);c.stroke();
   c.fillStyle='#e3b420';c.beginPath();c.moveTo(px,py-u*2.2);c.lineTo(px+u*1.3,py-u*1.75);c.lineTo(px,py-u*1.3);c.fill();}
 function drawMap(dt){
@@ -524,7 +596,8 @@ function drawMap(dt){
   c.fillStyle='#e3b420';c.beginPath();c.moveTo(px,py-u*2.2);c.lineTo(px+u*1.3,py-u*1.75);c.lineTo(px,py-u*1.3);c.fill();
   const wg=(D.golfers.find(g=>g.id===ui.watch)||(ui.board&&(ui.board.players||[]).find(p=>p.id===ui.watch))||{}),gcol=COLORS[wg.color]||'#c2362a';
   for(const s of A.trail)drawTracer(c,X,Y,Sc,H,u,s,1,gcol,false);
-  if(moving){drawTracer(c,X,Y,Sc,H,u,sh,e,gcol,true);drawGolfer(c,X,Y,u,sh,P.sw,gcol,P.f<.35?1:Math.max(0,1-(P.f-.35)/.3));}
+  if(moving){drawTracer(c,X,Y,Sc,H,u,sh,e,gcol,true);drawGolfer(c,X,Y,u,sh,swingT(P,true),gcol,P.f<.35?1:Math.max(0,1-(P.f-.35)/.3));}
+  A.panel={sh,P,live:moving,col:gcol,u};
   if(sunk){if(hw<1){c.fillStyle=`rgba(255,255,255,${Math.min(1,2.2*(1-hw))})`;c.font=`700 ${Math.round(u*1.5)}px 'Barlow Condensed','Arial Narrow',sans-serif`;c.textAlign='center';
       c.strokeStyle=`rgba(16,32,26,${Math.min(1,2.2*(1-hw))})`;c.lineWidth=u*.3;const ty=Math.max(u*2,py-u*3.4-hw*u);c.strokeText('IN THE HOLE',px,ty);c.fillText('IN THE HOLE',px,ty);}
     return;}
@@ -838,7 +911,7 @@ function mFrame(ts){const M=ui.ma,cv=document.getElementById('mcv');if(ui.view!=
     else if(M.phase==='wait'){M.w+=dt;if(M.w>mWait(q.sh)){M.si++;if(M.si>=M.seq.length){M.si=M.seq.length-1;mEndHole();}else{M.phase='shot';M.t=0;}}}
     else if(M.phase==='post'){M.w+=dt;if(M.w>1700){M.phase='idle';if(M.live)mpSync();}}}
   else if(M.phase==='post'){M.w+=dt;if(M.w>1700){M.phase='idle';if(M.live)mpSync();}}
-  mDraw(dt);requestAnimationFrame(mFrame);}
+  mDraw(dt);if(M.panel){const q=M.panel;drawShotPanels(cv.getContext('2d'),cv.width,cv.height,q.u,q.sh,q.P,q.live,q.col);}requestAnimationFrame(mFrame);}
 function mDraw(dt){const M=ui.ma,cv=document.getElementById('mcv');if(!cv||!M.h)return;const c=cv.getContext('2d'),W=cv.width,H=cv.height,h=M.h;
   const q=M.seq&&M.seq.length?M.seq[Math.min(M.si,M.seq.length-1)]:null,moving=!!q&&M.phase==='shot',P=moving?shotPhase(q.sh,M.t):{sw:1,f:1},ez=1-Math.pow(1-P.f,2.2);
   const focus=q?(moving?q.sh.from:q.sh.to):[0,0],nearG=M.pos?M.pos.every((pp,p)=>M.holed[p]||dist(pp,h.green)<=52)&&dist(focus,h.green)<=52:false;
@@ -848,7 +921,8 @@ function mDraw(dt){const M=ui.ma,cv=document.getElementById('mcv');if(!cv||!M.h)
   const px=X(h.pin[0]),py=Y(h.pin[1]);c.fillStyle='#10201a';c.beginPath();c.arc(px,py,Math.max(2.5,.45*Sc),0,6.3);c.fill();drawFlag(c,px,py,u);
   // each golfer's earlier shots as faint arcs in his side's colour; the shot in the air glows, with the golfer swinging at it
   if(M.trail)M.trail.forEach((tr,p)=>{for(const s of tr)drawTracer(c,X,Y,Sc,H,u,s,1,MPC[M.balls[p].side],false);});
-  let ball=null;if(moving&&q.sh.k!=='drop'&&q.sh.k!=='pick'){ball=shotAt(q.sh,ez);drawTracer(c,X,Y,Sc,H,u,q.sh,ez,MPC[q.side],true);drawGolfer(c,X,Y,u,q.sh,P.sw,MPC[q.side],P.f<.35?1:Math.max(0,1-(P.f-.35)/.3));}
+  let ball=null;if(moving&&q.sh.k!=='drop'&&q.sh.k!=='pick'){ball=shotAt(q.sh,ez);drawTracer(c,X,Y,Sc,H,u,q.sh,ez,MPC[q.side],true);drawGolfer(c,X,Y,u,q.sh,swingT(P,true),MPC[q.side],P.f<.35?1:Math.max(0,1-(P.f-.35)/.3));}
+  M.panel=q&&(M.phase==='shot'||M.phase==='wait')?{sh:q.sh,P,live:moving,col:MPC[q.side],u}:null;
   if(!M.pos)return;
   for(let p=0;p<M.pos.length;p++){if(M.holed[p]&&!(moving&&q.p===p))continue;const at=moving&&q.p===p?(ball||q.sh.from):M.pos[p];
     const lift=moving&&q.p===p?shotLift(q.sh,ez,Sc,H):0,air=lift?lift/Math.max(1,H*.13):0;

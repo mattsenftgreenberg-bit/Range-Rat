@@ -260,7 +260,7 @@ function ordinal(n: number) { return n + (['th', 'st', 'nd', 'rd'][n % 10 > 3 ||
 // One nine-hole match. Holes after the 9th are sudden death.
 function mpMatch(A: any, B: any, course: any, wind: any) {
   const sa = E.initState(A, 1, 0, 0), sb2 = E.initState(B, 1, 0, 0), holes: number[][] = [], shots: any[] = [];
-  const pack = (r: any) => r.shots.map((x: any) => ({ k: x.k, from: x.from.map(r1), to: x.to.map(r1), text: x.text, holed: !!x.holed }));
+  const pack = (r: any) => r.shots.map((x: any) => ({ k: x.k, from: x.from.map(r1), to: x.to.map(r1), text: x.text, holed: !!x.holed, ...(x.q ? { q: x.q } : {}) }));
   let diff = 0, h = 0;
   while (true) {
     const hole = course.holes[h % 18], tight = (h >= 6 && Math.abs(diff) <= 1) || h >= 9;
@@ -377,7 +377,7 @@ async function scheduleTeam(s: any, done: string[]) {
 // One nine-hole best-ball match between two sides of golfers. Holes after the 9th are sudden death.
 function tmMatch(A: any[], B: any[], course: any, wind: any) {
   const st = [A.map((g) => E.initState(g, 1, 0, 0)), B.map((g) => E.initState(g, 1, 0, 0))], side = [A, B];
-  const pack = (r: any) => r.shots.map((x: any) => ({ k: x.k, from: x.from.map(r1), to: x.to.map(r1), text: x.text, holed: !!x.holed }));
+  const pack = (r: any) => r.shots.map((x: any) => ({ k: x.k, from: x.from.map(r1), to: x.to.map(r1), text: x.text, holed: !!x.holed, ...(x.q ? { q: x.q } : {}) }));
   const holes: number[][] = [], members: number[][][] = [], shots: any[] = [];
   let diff = 0, h = 0;
   while (true) {
@@ -579,7 +579,7 @@ async function simRound(ev: any) {
         if (quick) { const rr = (o.r ??= []); (rr[r] ??= { g: [], d: [], u: [] }); rr[r].g.push(x.gir); rr[r].d.push(x.drive); (rr[r].u ??= []).push(x.ud); } }
       if (p.managed) shots.push({
         event_id: ev.id, golfer_id: p.g.id, round: r, hole: h, mood: r1(p.st.mood), run: p.st.run,
-        shots: res.shots.map((x: any) => ({ k: x.k, from: x.from.map(r1), to: x.to.map(r1), text: x.text, holed: !!x.holed })),
+        shots: res.shots.map((x: any) => ({ k: x.k, from: x.from.map(r1), to: x.to.map(r1), text: x.text, holed: !!x.holed, ...(x.q ? { q: x.q } : {}) })),
       });
     }
   }
