@@ -9,8 +9,8 @@ const TORDER_ON=['jr','col0','p3','p2','p1','c2','c1'];
 const SB=window.supabase&&window.RR_CONFIG?window.supabase.createClient(RR_CONFIG.url,RR_CONFIG.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
 const FN=RR_CONFIG.url+'/functions/v1/game';
 const CADL=['No caddy','Beginner caddy','Advanced caddy','Expert caddy'];
-const DEFAULTS={ace_bonus:100000,start_cash:75000,max_golfers:8,sessions_per_day:1,lessons_per_day:5,coach_max:1.5,deadline_min:5,round_min:7.5,events_per_season:8,hours:[18,19,20,21],gain_mult:1,rust_per_day:.025,recovery_per_day:15,event_fatigue:20,train_fatigue:15,purse_mult:1,fee_mult:1,sale_chance_mult:1,coach_age_yr:18,recruit_cost:5000,mp_on:true,mp_fee_jr:250,mp_fee_col:500,mp_fee_p3:1000,mp_fee_c2:1250,mp_fee_p2:2000,mp_fee_c1:3000,mp_fee_p1:5000,mp_base:0,market_size:14,market_new:4,ai_coaches:30,market_prodigy_pct:1,weekends:true,qf_on:true,qf_every_min:20,qf_fee:200,qf_base:20000,qf_add:200,qf_bonus:1000,qf_ace:1000000};
-const SETN={ace_bonus:'Hole-in-one bonus in tour events and Match Play (managers\' golfers)',mp_on:'Match Play running (true or false)',mp_fee_jr:'Match Play entry fee: Junior',mp_fee_col:'Match Play entry fee: College',mp_fee_p3:'Match Play entry fee: Mini Tour',mp_fee_c2:'Match Play entry fee: Senior Qualifying',mp_fee_p2:'Match Play entry fee: Challenger',mp_fee_c1:'Match Play entry fee: Champions',mp_fee_p1:'Match Play entry fee: Premier',mp_base:'Match Play guaranteed pot added at college (other levels scale; 0 = entry fees only)',market_prodigy_pct:'Chance a market golfer is a Prodigy (%, at most 5)',market_size:'Golfers for sale from rival coaches',market_new:'New faces on the market each hour',ai_coaches:'Computer coaches available',recruit_cost:'Cost to sign a junior',qf_on:'Quick-Fire Opens running (true or false)',qf_every_min:'Minutes between Quick-Fire Opens',qf_fee:'Quick-Fire entry fee',qf_base:'Quick-Fire base pot',qf_add:'Added to the pot per entry',qf_bonus:'Most greens / up and downs / long drive bonus',qf_ace:'Hole-in-one bonus',start_cash:'Starting money for a new roster',max_golfers:'Most active golfers per roster',sessions_per_day:'Range sessions per golfer per day',lessons_per_day:'Lessons each coach gives per day',coach_max:'Best coach multiplier',deadline_min:'Entry deadline, minutes before the start',round_min:'Minutes per round',weekends:'Tour events on weekends too (true or false)',events_per_season:'(not used: there is now an event every night)',hours:'Start hours (New York time)',gain_mult:'Training gain multiplier',rust_per_day:'Rust per skipped day',recovery_per_day:'Fatigue recovered per day',event_fatigue:'Fatigue from playing an event',train_fatigue:'Fatigue from a range session',purse_mult:'Purse multiplier (new events)',fee_mult:'Entry fee multiplier (new events)',sale_chance_mult:'How keen rival coaches are to buy',coach_age_yr:'Career year a golfer may retire to coach'};
+const DEFAULTS={tm_on:true,tm_fee_jr:1000,tm_fee_col:2000,tm_fee_p3:4000,tm_fee_c2:5000,tm_fee_p2:8000,tm_fee_c1:12000,tm_fee_p1:20000,tm_hole_mult:2.5,ace_bonus:100000,start_cash:75000,max_golfers:8,sessions_per_day:1,lessons_per_day:5,coach_max:1.5,deadline_min:5,round_min:7.5,events_per_season:8,hours:[18,19,20,21],gain_mult:1,rust_per_day:.025,recovery_per_day:15,event_fatigue:20,train_fatigue:15,purse_mult:1,fee_mult:1,sale_chance_mult:1,coach_age_yr:18,recruit_cost:5000,mp_on:true,mp_fee_jr:250,mp_fee_col:500,mp_fee_p3:1000,mp_fee_c2:1250,mp_fee_p2:2000,mp_fee_c1:3000,mp_fee_p1:5000,mp_base:0,market_size:14,market_new:4,ai_coaches:30,market_prodigy_pct:1,weekends:true,qf_on:true,qf_every_min:20,qf_fee:200,qf_base:20000,qf_add:200,qf_bonus:1000,qf_ace:1000000};
+const SETN={tm_on:'Team Match Play on',tm_fee_jr:'Team Match Play fee: Junior',tm_fee_col:'Team Match Play fee: College',tm_fee_p3:'Team Match Play fee: Mini Tour',tm_fee_c2:'Team Match Play fee: Senior Qualifying',tm_fee_p2:'Team Match Play fee: Challenger',tm_fee_c1:'Team Match Play fee: Champions',tm_fee_p1:'Team Match Play fee: Premier',tm_hole_mult:'Team Match Play: hole time (times a normal hole)',ace_bonus:'Hole-in-one bonus in tour events and Match Play (managers\' golfers)',mp_on:'Match Play running (true or false)',mp_fee_jr:'Match Play entry fee: Junior',mp_fee_col:'Match Play entry fee: College',mp_fee_p3:'Match Play entry fee: Mini Tour',mp_fee_c2:'Match Play entry fee: Senior Qualifying',mp_fee_p2:'Match Play entry fee: Challenger',mp_fee_c1:'Match Play entry fee: Champions',mp_fee_p1:'Match Play entry fee: Premier',mp_base:'Match Play guaranteed pot added at college (other levels scale; 0 = entry fees only)',market_prodigy_pct:'Chance a market golfer is a Prodigy (%, at most 5)',market_size:'Golfers for sale from rival coaches',market_new:'New faces on the market each hour',ai_coaches:'Computer coaches available',recruit_cost:'Cost to sign a junior',qf_on:'Quick-Fire Opens running (true or false)',qf_every_min:'Minutes between Quick-Fire Opens',qf_fee:'Quick-Fire entry fee',qf_base:'Quick-Fire base pot',qf_add:'Added to the pot per entry',qf_bonus:'Most greens / up and downs / long drive bonus',qf_ace:'Hole-in-one bonus',start_cash:'Starting money for a new roster',max_golfers:'Most active golfers per roster',sessions_per_day:'Range sessions per golfer per day',lessons_per_day:'Lessons each coach gives per day',coach_max:'Best coach multiplier',deadline_min:'Entry deadline, minutes before the start',round_min:'Minutes per round',weekends:'Tour events on weekends too (true or false)',events_per_season:'(not used: there is now an event every night)',hours:'Start hours (New York time)',gain_mult:'Training gain multiplier',rust_per_day:'Rust per skipped day',recovery_per_day:'Fatigue recovered per day',event_fatigue:'Fatigue from playing an event',train_fatigue:'Fatigue from a range session',purse_mult:'Purse multiplier (new events)',fee_mult:'Entry fee multiplier (new events)',sale_chance_mult:'How keen rival coaches are to buy',coach_age_yr:'Career year a golfer may retire to coach'};
 const ui={view:'loading',sel:null,msg:'',err:'',busy:false,auth:{mode:'in',email:'',msg:'',err:false,busy:false},tour:null,ev:null,watch:null,board:null,feed:null,pros:{name:'',country:'US',college:'',color:0},full:false};
 const D={user:null,me:null,golfers:[],events:[],entries:[],world:null,settings:{...DEFAULTS},coaches:[],market:[],names:{}};
 let poll=null,boardPoll=null;
@@ -20,11 +20,11 @@ const S=()=>D.settings;
 const mine=()=>D.golfers.filter(g=>!g.retired);
 const G=()=>D.golfers.find(g=>g.id===ui.sel)||mine()[0]||D.golfers[0];
 const qfBase=lv=>Math.round(S().qf_base*TOURS[lv==='col'?'col0':lv].purse/TOURS.col0.purse/1000)*1000;
-const QF='qf',isQ=e=>!!e&&String(e.tour).startsWith('qf'),MP='mp',isM=e=>!!e&&String(e.tour).startsWith('mp:');
+const QF='qf',isQ=e=>!!e&&String(e.tour).startsWith('qf'),MP='mp',isM=e=>!!e&&String(e.tour).startsWith('mp:'),TM='tm',isT=e=>!!e&&String(e.tour).startsWith('tm:'),isB=e=>isM(e)||isT(e);
 const mpBase=lv=>Math.round(S().mp_base*TOURS[lv==='col'?'col0':lv].purse/TOURS.col0.purse/100)*100;
 const qLevel=g=>isCol(g.tour)?'col':g.tour,lvName=lv=>lv==='col'?'College':lv==='jr'?'Junior':(TOURS[lv]||{name:lv}).name;
-const canPlay=(e,g)=>isQ(e)||isM(e)?e.tour.slice(3)===qLevel(g):e.tour===g.tour;
-const T=t=>t===QF?{name:'Quick-Fire Opens'}:t===MP?{name:'Match Play'}:String(t).startsWith('qf:')?{name:'Quick-Fire · '+lvName(t.slice(3))}:String(t).startsWith('mp:')?{name:'Match Play · '+lvName(t.slice(3))}:TOURS[t]||{name:t};
+const canPlay=(e,g)=>isQ(e)||isB(e)?e.tour.slice(3)===qLevel(g):e.tour===g.tour;
+const T=t=>t===QF?{name:'Quick-Fire Opens'}:t===MP?{name:'Match Play'}:t===TM?{name:'Team Match Play'}:String(t).startsWith('tm:')?{name:'Team Match Play · '+lvName(t.slice(3))}:String(t).startsWith('qf:')?{name:'Quick-Fire · '+lvName(t.slice(3))}:String(t).startsWith('mp:')?{name:'Match Play · '+lvName(t.slice(3))}:TOURS[t]||{name:t};
 const nR=e=>(e&&e.rounds)||4;
 const etFmt=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
 const when=iso=>etFmt.format(new Date(iso))+' ET';
@@ -35,7 +35,7 @@ const endsAt=e=>Date.parse(e.starts_at)+nR(e)*rmin(e)*60e3;
 const evNow=()=>{const d=D.events.find(x=>x.id===ui.ev),s=ui.board&&ui.board.event&&ui.board.event.id===ui.ev?ui.board.event:null;return d||s?Object.assign({},d||{},s||{}):null;};
 function phase(e){if(e.status==='final')return'final';const now=Date.now();if(now<deadline(e))return'open';if(now<Date.parse(e.starts_at))return'closed';return'live';}
 const entryOf=(e,g)=>D.entries.find(x=>x.event_id===e.id&&x.golfer_id===g.id);
-function inField(e,g){const x=entryOf(e,g);if(x)return x.status==='in';if(isQ(e)||isM(e))return false;return e.test||g.enter_rule==='all'||(g.enter_rule==='signature'&&['Signature','Finale'].includes(e.type));}
+function inField(e,g){const x=entryOf(e,g);if(x)return x.status==='in';if(isQ(e)||isB(e))return false;return e.test||g.enter_rule==='all'||(g.enter_rule==='signature'&&['Signature','Finale'].includes(e.type));}
 const subRowO=(g,k,ro,kid)=>`<div class="sn${kid?' kid':''}">${SUBN[k]}<small>${SUBD[k]}</small></div><div class="track"><i style="width:${clamp(g.sk[k],0,100)}%;background:${barC(g.sk[k])}"></i></div><div class="sv">${Math.round(g.sk[k])}</div>${ro?'':`<button class="btn xs" data-act="train" data-v="${k}" ${g.sessions>0?'':'disabled'}>Drill</button>`}`;
 function umbO(g,u,ro){const v=um(g.sk,u);let rows;
   if(u==='s'){const pv=(g.sk.sputt+g.sk.lputt)/2;rows=['wedge','pitch','chip','bunker'].map(k=>subRowO(g,k,ro)).join('')+`<div class="sn grp">Putting</div><div class="track"><i style="width:${pv}%;background:${barC(pv)}"></i></div><div class="sv">${Math.round(pv)}</div>${ro?'':'<span></span>'}`+subRowO(g,'sputt',ro,1)+subRowO(g,'lputt',ro,1);}
@@ -68,20 +68,20 @@ async function load(){
     SB.from('golfers').select('*').eq('manager_id',uid).order('created_at'),
     // tour events from the last three days, and the quick events (Quick-Fire, Match Play) only from the last six hours:
     // there are dozens of those an hour, and one shared list would crowd the Finales out
-    SB.from('events').select(EVCOLS).gte('starts_at',new Date(Date.now()-3*864e5).toISOString()).not('tour','like','qf:%').not('tour','like','mp:%').order('starts_at').limit(400),
+    SB.from('events').select(EVCOLS).gte('starts_at',new Date(Date.now()-3*864e5).toISOString()).not('tour','like','qf:%').not('tour','like','mp:%').not('tour','like','tm:%').order('starts_at').limit(400),
     // only entries for the events loaded below: a busy manager has thousands of old Quick-Fire entries,
     // and the server returns at most 1,000 rows, so loading them all used to drop the newest ones
-    SB.from('entries').select('*,events!inner(starts_at,tour)').eq('manager_id',uid).gte('events.starts_at',new Date(Date.now()-3*864e5).toISOString()).not('events.tour','like','qf:%').not('events.tour','like','mp:%'),
+    SB.from('entries').select('*,events!inner(starts_at,tour)').eq('manager_id',uid).gte('events.starts_at',new Date(Date.now()-3*864e5).toISOString()).not('events.tour','like','qf:%').not('events.tour','like','mp:%').not('events.tour','like','tm:%'),
     SB.from('world').select('*').maybeSingle(),
     SB.from('settings').select('key,value'),
     SB.from('golfers').select('id,name,country,manager_id,stable,cr,best,tour,stats,trophies,ret_age,color').eq('retired',true).not('cr','is',null),
     SB.from('golfers').select('id,name,country,manager_id,stable,sk,yr,tour,college,ask,arch,stats,listed_at,color').not('ask','is',null).eq('retired',false).order('ask'),
-    SB.from('events').select(EVCOLS).gte('starts_at',new Date(Date.now()-6*36e5).toISOString()).or('tour.like.qf:*,tour.like.mp:*').order('starts_at').limit(400),
-    SB.from('entries').select('*,events!inner(starts_at,tour)').eq('manager_id',uid).gte('events.starts_at',new Date(Date.now()-6*36e5).toISOString()).or('tour.like.qf:*,tour.like.mp:*',{referencedTable:'events'}),
+    SB.from('events').select(EVCOLS).gte('starts_at',new Date(Date.now()-6*36e5).toISOString()).or('tour.like.qf:*,tour.like.mp:*,tour.like.tm:*').order('starts_at').limit(600),
+    SB.from('entries').select('*,events!inner(starts_at,tour)').eq('manager_id',uid).gte('events.starts_at',new Date(Date.now()-6*36e5).toISOString()).or('tour.like.qf:*,tour.like.mp:*,tour.like.tm:*',{referencedTable:'events'}),
   ]);
   D.me=me.data;D.golfers=gs.data||[];D.events=(ev.data||[]).concat(qk.data||[]).filter(e=>e.tour!=='col1'&&e.tour!=='col2').sort((a,b)=>a.starts_at<b.starts_at?-1:a.starts_at>b.starts_at?1:0);/* the old college circuits are gone */D.entries=(en.data||[]).concat(qe.data||[]);if(en.error||qe.error){const f=await SB.from('entries').select('*').eq('manager_id',uid).order('created_at',{ascending:false}).limit(1000);D.entries=f.data||D.entries;}
   // how many golfers other managers have entered in each open Quick-Fire and Match Play, for the Events page
-  D.qIn={};const qOpen=D.events.filter(e=>(isQ(e)||isM(e))&&phase(e)==='open').map(e=>e.id);
+  D.qIn={};const qOpen=D.events.filter(e=>(isQ(e)||isB(e))&&phase(e)==='open').map(e=>e.id);
   if(qOpen.length){const {data:qa}=await SB.from('entries').select('event_id,manager_id').in('event_id',qOpen).eq('status','in').neq('manager_id',uid);
     for(const x of qa||[]){const o=D.qIn[x.event_id]||(D.qIn[x.event_id]={n:0,m:new Set()});o.n++;o.m.add(x.manager_id);}}
   D.world=w.data;D.coaches=co.data||[];D.market=mk.data||[];
@@ -183,10 +183,10 @@ ${coachBoard(g)}
 </section>
 `;},
 events(){
-  const tours=[...new Set(D.events.map(e=>isQ(e)?QF:isM(e)?MP:e.tour))].sort((a,b)=>TORDER_ON.indexOf(a)-TORDER_ON.indexOf(b));
-  const t=ui.tour||'all',list=D.events.filter(e=>t==='all'||(t===QF?isQ(e):t===MP?isM(e):e.tour===t));
+  const tours=[...new Set(D.events.map(e=>isQ(e)?QF:isM(e)?MP:isT(e)?TM:e.tour))].sort((a,b)=>TORDER_ON.indexOf(a)-TORDER_ON.indexOf(b));
+  const t=ui.tour||'all',list=D.events.filter(e=>t==='all'||(t===QF?isQ(e):t===MP?isM(e):t===TM?isT(e):e.tour===t));
   const qn=D.events.filter(e=>isQ(e)&&phase(e)==='open')[0],qset=qn?D.events.filter(e=>isQ(e)&&e.starts_at===qn.starts_at).sort((a,b)=>['jr','col','p3','p2','p1','c2','c1'].indexOf(a.tour.slice(3))-['jr','col','p3','p2','p1','c2','c1'].indexOf(b.tour.slice(3))):[];
-  const quick=e=>t==='all'&&(isQ(e)||isM(e)),live=list.filter(e=>['live','closed'].includes(phase(e))&&e.status!=='final'&&!quick(e)),next=list.filter(e=>phase(e)==='open'&&!isQ(e)&&!isM(e)).slice(0,12),done=list.filter(e=>e.status==='final'&&!quick(e)).reverse().slice(0,12);
+  const quick=e=>t==='all'&&(isQ(e)||isB(e)),live=list.filter(e=>['live','closed'].includes(phase(e))&&e.status!=='final'&&!quick(e)),next=list.filter(e=>phase(e)==='open'&&!isQ(e)&&!isB(e)).slice(0,12),done=list.filter(e=>e.status==='final'&&!quick(e)).reverse().slice(0,12);
   const row=e=>`<div class="item"><b>${esc(e.name)}${e.test?' <span class="tag">Test</span>':''}</b><span>${T(e.tour).name}. ${COURSES[e.ci].name}. ${when(e.starts_at)}. Purse ${fmt$(e.purse)}${e.fee?`, entry ${fmt$(e.fee)}`:''}.</span><span>${mineIn(e)}</span><button class="btn sm" data-act="board" data-v="${e.id}">${e.status==='final'?'Results':phase(e)==='open'?'Field':'Watch'}</button></div>`;
   return `<section class="intro"><p class="eyebrow">Season ${D.world?D.world.season:1}${D.world?`, through ${new Date(D.world.season_end+'T12:00:00Z').toLocaleDateString('en-US',{month:'long',day:'numeric'})}`:''}</p><h1>Events</h1><p class="lede">Every event starts on the clock and takes about ${Math.round(4*S().round_min)} minutes: four rounds, one hole every ${Math.round(S().round_min*60/18)} seconds. Everyone watches the same holes at the same time.</p></section>
 <section class="sec"><div class="row" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn sm${t==='all'?' on':''}" data-act="tour" data-v="all">All tours</button>${tours.map(x=>`<button class="btn sm${t===x?' on':''}" data-act="tour" data-v="${x}">${T(x).name}</button>`).join('')}</div></section>
@@ -198,8 +198,9 @@ board(){const b=ui.board,e=evNow();
   if(!e)return '<section class="sec"><p class="muted">Loading the board…</p></section>';
   const back='<button class="btn sm" data-act="go" data-v="events">← Events</button>';
   const ph=phase(e);
-  const head=`<section class="intro"><p class="eyebrow">${T(e.tour).name}${e.test?' · test event':''}</p><h1>${esc(e.name)}</h1><p class="lede">${COURSES[e.ci].name}: ${COURSES[e.ci].blurb} Starts ${when(e.starts_at)}. ${isM(e)?`Knockout match play, nine holes a match. ${e.status==='open'?`Pot so far ${fmt$((e.purse||0)+e.fee*((ui.preview&&ui.preview.eid===e.id)?ui.preview.rows.length:0))}`:`Pot ${fmt$(e.purse)}`}.`:isQ(e)?`Two rounds, no cut. ${e.status==='open'?`Pot so far ${fmt$(qfBase(e.tour.slice(3))+S().qf_add*((ui.preview&&ui.preview.eid===e.id)?ui.preview.rows.length:0))}`:`Pot ${fmt$(e.purse)}`}.`:`Purse ${fmt$(e.purse)}.`}${!isQ(e)&&S().ace_bonus>0?` Any hole in one by a manager's golfer earns a ${fmt$(S().ace_bonus)} bonus.`:''}</p>${back}</section>`;
-  if(isM(e)&&ph!=='open')return head+mpView(e);
+  const head=`<section class="intro"><p class="eyebrow">${T(e.tour).name}${e.test?' · test event':''}</p><h1>${esc(e.name)}</h1><p class="lede">${COURSES[e.ci].name}: ${COURSES[e.ci].blurb} Starts ${when(e.starts_at)}. ${isT(e)?`Teams of four, best ball: each hole the team's lowest score counts. Nine holes a match, knockout. ${e.status==='open'?`Pot so far ${fmt$(e.fee*tmTeams(e))}`:`Pot ${fmt$(e.purse)}`}.`:isM(e)?`Knockout match play, nine holes a match. ${e.status==='open'?`Pot so far ${fmt$((e.purse||0)+e.fee*((ui.preview&&ui.preview.eid===e.id)?ui.preview.rows.length:0))}`:`Pot ${fmt$(e.purse)}`}.`:isQ(e)?`Two rounds, no cut. ${e.status==='open'?`Pot so far ${fmt$(qfBase(e.tour.slice(3))+S().qf_add*((ui.preview&&ui.preview.eid===e.id)?ui.preview.rows.length:0))}`:`Pot ${fmt$(e.purse)}`}.`:`Purse ${fmt$(e.purse)}.`}${!isQ(e)&&S().ace_bonus>0?` Any hole in one by a manager's golfer earns a ${fmt$(S().ace_bonus)} bonus.`:''}</p>${back}</section>`;
+  if(isB(e)&&ph!=='open')return head+mpView(e);
+  if(ph==='open'&&isT(e))return head+tmOpenHTML(e);
   if(ph==='open'){const gs=mine().filter(g=>canPlay(e,g)),todo=gs.filter(g=>!inField(e,g)),cost=(e.test?0:e.fee)*todo.length;
     return head+`<section class="sec"><h2>Entries close in ${until(new Date(deadline(e)).toISOString())}</h2>${todo.length>1?`<div class="row" style="justify-content:flex-start;flex-wrap:wrap;margin-bottom:8px"><button class="btn primary sm" data-act="enterAll" data-v="${e.id}" ${ui.busy||D.me.cash<cost?'disabled':''}>Enter all ${todo.length}${cost?` for ${fmt$(cost)}`:''}</button>${D.me.cash<cost?'<span class="muted small">Not enough money for all of them.</span>':''}</div>`:''}${gs.length?`<div class="shop">${gs.map(g=>evItem(e,g,true)).join('')}</div>`:'<p class="muted">None of your golfers play on this tour.</p>'}${flash()}</section><div class="fieldpay">${previewHTML(e)}${isM(e)?mpPayHTML(e):payoutHTML(e)}</div>`;}
   if(ph==='closed')return head+teeHTML(e,b);
@@ -332,14 +333,14 @@ function payoutHTML(e){const q=isQ(e),n=ui.preview&&ui.preview.eid===e.id?ui.pre
  <div class="scroll"><table class="tbl"><thead><tr><th>Finish</th><th class="num">Prize</th>${q?'':'<th class="num">Points</th>'}</tr></thead><tbody>${groups.map(row).join('')}</tbody></table></div>
  <p class="muted small">${q?`Plus ${fmt$(S().qf_bonus)} each for most greens, most up and downs and the long drive, and ${fmt$(S().qf_ace)} for a hole in one (managers' golfers only).`:`Tied golfers share the money for the places they cover. Missing the cut pays nothing.${e.fee?` Entry costs ${fmt$(e.fee)}.`:''}`} <button class="linkbtn" data-act="payAll">${ui.payAll?'Show fewer places':'Show every place'}</button></p></section>`;}
 async function loadPreview(e){
-  if(isQ(e)||isM(e)){const en=await SB.from('entries').select('golfer_id').eq('event_id',e.id).eq('status','in');const ids=(en.data||[]).map(x=>x.golfer_id);const gs=ids.length?await SB.from('golfers').select('id,name,country,college,stable,manager_id,sk,yr,tour').in('id',ids):{data:[]};const rows=(gs.data||[]).map(g=>({g,how:'Entered'}));rows.sort((a,b)=>ovr(b.g.sk)-ovr(a.g.sk));ui.preview={eid:e.id,rows};return;}
+  if(isQ(e)||isB(e)){const en=await SB.from('entries').select('golfer_id').eq('event_id',e.id).eq('status','in');const ids=(en.data||[]).map(x=>x.golfer_id);const gs=ids.length?await SB.from('golfers').select('id,name,country,college,stable,manager_id,sk,yr,tour').in('id',ids):{data:[]};const rows=(gs.data||[]).map(g=>({g,how:'Entered'}));rows.sort((a,b)=>ovr(b.g.sk)-ovr(a.g.sk));ui.preview={eid:e.id,rows};return;}
   const [gs,en]=await Promise.all([SB.from('golfers').select('id,name,country,college,stable,manager_id,sk,yr,enter_rule').eq('tour',e.tour).eq('retired',false).not('manager_id','is',null),SB.from('entries').select('golfer_id,status').eq('event_id',e.id)]);
   const st=new Map((en.data||[]).map(x=>[x.golfer_id,x.status]));
   const rows=(gs.data||[]).map(g=>{const s=st.get(g.id),auto=e.test||g.enter_rule==='all'||(g.enter_rule==='signature'&&['Signature','Finale'].includes(e.type));return{g,how:s==='in'?'Entered':s==='out'?null:auto?'Entered automatically':null};}).filter(r=>r.how);
   rows.sort((a,b)=>ovr(b.g.sk)-ovr(a.g.sk));ui.preview={eid:e.id,rows};}
 function previewHTML(e){const P=ui.preview&&ui.preview.eid===e.id?ui.preview.rows:null;
   return `<section class="sec"><h2>The field so far</h2>${!P?'<p class="muted">Loading…</p>':!P.length?'<p class="muted">No managers\u2019 golfers are in yet.</p>':`<div class="scroll"><table class="tbl"><thead><tr><th>Golfer</th><th>Roster</th><th class="num">Overall</th></tr></thead><tbody>${P.map(r=>`<tr class="${r.g.manager_id===D.user.id?'me':'now'}"><td>${flagHTML(r.g.country)}${esc(r.g.name)}${ageTag(r.g.yr,r.g.tour)}${isCol(e.tour)?` <span class="muted small">${esc(r.g.college||'')}</span>`:''}${r.how==='Entered automatically'?' <span class="muted small">(auto)</span>':''}</td><td class="small">${esc(r.g.stable||'')}</td><td class="num">${Math.round(ovr(r.g.sk))}</td></tr>`).join('')}</tbody></table></div>`}
-  <p class="muted small">${P?`${P.length} golfer${P.length===1?'':'s'} from managers\u2019 rosters so far. `:''}${isM(e)?'No tour regulars: only these golfers play.':`When entries close, tour regulars fill the rest of the ${FIELD} spots. Auto entries can still withdraw before then.`}</p></section>`;}
+  <p class="muted small">${P?`${P.length} golfer${P.length===1?'':'s'} from managers\u2019 rosters so far. `:''}${isT(e)?'Each roster\u2019s golfers here make up one team.':isM(e)?'No tour regulars: only these golfers play.':`When entries close, tour regulars fill the rest of the ${FIELD} spots. Auto entries can still withdraw before then.`}</p></section>`;}
 async function loadStand(t){const {data}=await SB.from('standings').select('pts,wins,earn,golfers(name,country,stable,manager_id,yr)').eq('tour',t).eq('season',D.world?D.world.season:1).order('pts',{ascending:false}).limit(200);ui.stand={t,rows:data||[]};if(ui.view==='standings')render();}
 
 /* ---------- watching a golfer: the hole map, played on the clock ---------- */
@@ -494,6 +495,7 @@ ${['jr','col0','p3','p2','p1','c2','c1'].map(t=>`<tr><td>${TOURS[t].name}</td><t
 <section class="sec gsec"><h2>Events</h2>
 <p>Enter golfers by hand, or set an automatic rule for each one (every event, or only the big ones). Entries close <b>${s.deadline_min} minutes</b> before the start, then the field is set: managers' golfers first, then tour regulars, ${FIELD} in all.</p>
 <p>Four rounds. After two, the top ${CUT} and ties make the <b>cut</b>. Finishing positions earn prize money and <b>season points</b>. After Sunday's Finale the standings decide promotion and relegation and pay a bonus to the leaders: half a standard purse for the winner, then smaller bonuses down to the top ${Z}.</p>
+<p><b>Team Match Play</b> runs alongside them: up to four of your golfers from one level make a team and play best ball (each hole the team's lowest score counts), nine holes a match, knockout between teams. Computer regulars fill any empty places. One fee per team, from ${fmt$(s.tm_fee_jr)} for juniors up to ${fmt$(s.tm_fee_p1)} on the Premier Tour; if yours is the only team, it plays a computer team and the house matches the fee, so a win doubles it.</p>
 <p><b>Holes in one.</b> Any hole in one by a manager's golfer, in a tour event or a Match Play, earns a ${fmt$(s.ace_bonus)} bonus. In a Quick-Fire Open it's worth ${fmt$(s.qf_ace)}.</p>
 <p><b>Quick-Fire Opens</b> run every ${s.qf_every_min} minutes, all day, one for each level: juniors, college, each pro tour and each senior tour. They're two rounds with no cut and cost ${fmt$(s.qf_fee)} to enter. Each pot is scaled like its main tour, from ${fmt$(qfBase('jr'))} for juniors and ${fmt$(qfBase('col'))} for college up to ${fmt$(qfBase('p1'))} on the ${TOURS.p1.name}, and grows with every entry, and the top third of the field get paid. There are bonuses for most greens hit, most up and downs (on the green from 40 yards or closer, then one putt), the long drive and holes in one, for managers' golfers only. They don't tire golfers or count toward their career.</p>
 <p><b>Match Play</b> runs alongside them, one bracket per level: head to head over nine holes, with sudden death if it's tied, and the winner moves on until one golfer is left. Only managers' golfers play, and it needs at least two rosters to go ahead. Entry costs more the higher the level, from ${fmt$(s.mp_fee_jr)} for juniors to ${fmt$(s.mp_fee_p1)} on the Premier Tour, and the pot is made up of the entry fees. The champion takes 40%, the runner-up 20%, and the semifinalists and quarterfinalists share the rest.</p></section>
@@ -530,8 +532,8 @@ function coachBoard(g){const cur=g.coach_id&&D.coaches.find(x=>x.id===g.coach_id
  <div class="cgrid"><div class="ccard${cur?'':' on'}"><div class="chead"><b>Work alone</b></div><p class="muted small">No lessons, no fee.</p><div class="cfoot"><span>Free</span>${cur?'<button class="btn sm" data-act="coachpick" data-v="">Work alone</button>':'<span class="tag hot">Current</span>'}</div></div>${list.map(card).join('')}</div></details></section>`;}
 /* ---------- Match Play: the bracket ---------- */
 // Quick-Fire and Match Play side by side: one row per level, with the next event to enter and the one playing now
-function quickBoard(t){const showQ=t==='all'||t===QF,showM=t==='all'||t===MP;if(!showQ&&!showM)return '';
-  const L=['jr','col','p3','p2','p1','c2','c1'],kinds=[showQ&&{k:'q',is:isQ,name:'Quick-Fire'},showM&&{k:'m',is:isM,name:'Match Play'}].filter(Boolean);
+function quickBoard(t){const showQ=t==='all'||t===QF,showM=t==='all'||t===MP,showT=t==='all'||t===TM;if(!showQ&&!showM&&!showT)return '';
+  const L=['jr','col','p3','p2','p1','c2','c1'],kinds=[showQ&&{k:'q',is:isQ,name:'Quick-Fire'},showM&&{k:'m',is:isM,name:'Match Play'},showT&&{k:'t',is:isT,name:'Team'}].filter(Boolean);
   const nextOf=K=>{const q=D.events.filter(e=>K.is(e)&&phase(e)==='open')[0];return q?D.events.filter(e=>K.is(e)&&e.starts_at===q.starts_at):[];};
   const nowOf=K=>D.events.filter(e=>K.is(e)&&e.status!=='final'&&['live','closed'].includes(phase(e)));
   kinds.forEach(K=>{K.next=nextOf(K);K.now=nowOf(K);});if(!kinds.some(K=>K.next.length||K.now.length))return '';
@@ -539,19 +541,21 @@ function quickBoard(t){const showQ=t==='all'||t===QF,showM=t==='all'||t===MP;if(
   const short=lv=>lvName(lv).replace(/ Tour$/,'');
   const cell=(K,lv)=>{const nx=K.next.find(e=>e.tour.slice(3)===lv),lv2=K.now.filter(e=>e.tour.slice(3)===lv).pop();
     let h='',tail='';if(nx){const can=mine().filter(g=>canPlay(nx,g)),inn=can.filter(g=>{const x=entryOf(nx,g);return x&&x.status==='in';}).length;
-      h+=`<button class="btn xs${can.length&&!inn?' primary':''}${inn?' on':''}" data-act="board" data-v="${nx.id}" title="${esc(lvName(lv))} ${K.name}, ${when(nx.starts_at)}">${inn?`In: ${inn}`:can.length?'Enter':'Field'}</button>`;const oth=(D.qIn||{})[nx.id];if(oth&&oth.n)tail=`<small class="qin" title="${oth.n} golfer${oth.n>1?'s':''} from ${oth.m.size} other roster${oth.m.size>1?'s':''}">${oth.n} other${oth.n>1?'s':''} in</small>`;}
+      h+=`<button class="btn xs${can.length&&!inn?' primary':''}${inn?' on':''}" data-act="board" data-v="${nx.id}" title="${esc(lvName(lv))} ${K.name}, ${when(nx.starts_at)}">${inn?(K.k==='t'?`Team ${inn}/4`:`In: ${inn}`):can.length?'Enter':'Field'}</button>`;const oth=(D.qIn||{})[nx.id];if(oth&&oth.n)tail=K.k==='t'?`<small class="qin">${oth.m.size} other team${oth.m.size>1?'s':''}</small>`:`<small class="qin" title="${oth.n} golfer${oth.n>1?'s':''} from ${oth.m.size} other roster${oth.m.size>1?'s':''}">${oth.n} other${oth.n>1?'s':''} in</small>`;}
     if(lv2){const mineN=mine().filter(g=>{const x=entryOf(lv2,g);return x&&x.status==='in';}).length;
       h+=`<button class="btn xs qlive${mineN?' mine':''}" data-act="board" data-v="${lv2.id}" title="Playing now"><i></i>${phase(lv2)==='closed'?'Soon':'Live'}</button>`;}
     return `<td>${h||'<span class="muted">–</span>'}${tail}</td>`;};
-  const head=K=>{const nx=K.next[0];return `<th>${K.name}<small>${nx?`Next ${when(nx.starts_at).replace(' ET','')}, closes in ${until(new Date(deadline(nx)).toISOString())}`:'None open'}</small></th>`;};
+  const head=K=>`<th>${K.name}</th>`,nx0=kinds.map(K=>K.next[0]).filter(Boolean).sort((a,b)=>a.starts_at<b.starts_at?-1:1)[0];
   return `<section class="sec qfban qboard"><div class="qhead"><h2>Quick events</h2><p class="eyebrow">Every ${S().qf_every_min} minutes, all day</p></div>
+ ${nx0?`<p class="small qnext">Next round tees off at <b>${when(nx0.starts_at).replace(' ET','')}</b>; entries close in ${until(new Date(deadline(nx0)).toISOString())}.</p>`:''}
  <div class="scroll"><table class="qtbl"><thead><tr><th>Level</th>${kinds.map(head).join('')}</tr></thead><tbody>
  ${lvs.map(lv=>`<tr><th scope="row">${esc(short(lv))}</th>${kinds.map(K=>cell(K,lv)).join('')}</tr>`).join('')}
  </tbody></table></div>
- <p class="muted small">Enter takes you to the next one at that level; Live opens the one being played now (gold when one of yours is in it). "Others in" counts golfers other managers have entered.</p>
+ <p class="muted small">Enter takes you to the next one at that level; Live opens the one being played now (gold when one of yours is in it). "Others in" counts golfers other managers have entered; under Team, it's other managers' teams.</p>
  <details class="qhow"><summary>How they work</summary>
  ${showQ?`<p><b>Quick-Fire Open.</b> Two rounds, no cut, about ${Math.round(2*S().round_min)} minutes. ${fmt$(S().qf_fee)} to enter; each level's pot is scaled like the main tours (${fmt$(qfBase('col'))} for college) and grows ${fmt$(S().qf_add)} with every entry. The top third of the field get paid. ${fmt$(S().qf_bonus)} each for most greens hit, most up and downs (on the green from 40 yards or closer, then one putt) and the long drive, and ${fmt$(S().qf_ace)} for a hole in one. Only managers’ golfers can win the bonuses. It doesn't tire your golfers.</p>`:''}
  ${showM?`<p><b>Match Play.</b> Head to head, nine holes a match, knockout until one golfer is left; a tie after nine goes to sudden death, and the beaten semifinalists play for third. Only managers' golfers play, and it only goes ahead if at least two rosters enter. Entry runs from ${fmt$(S().mp_fee_jr)} for juniors up to ${fmt$(S().mp_fee_p1)} on the Premier Tour. The pot is the entry fees, and most of it goes to the deep runs.</p>`:''}
+ ${showT?`<p><b>Team Match Play.</b> Up to four of your golfers from one level play as a team, best ball: on each hole the team's lowest score counts. Nine holes a match, knockout between teams, computer regulars filling empty places. One fee per team, from ${fmt$(S().tm_fee_jr)} for juniors up to ${fmt$(S().tm_fee_p1)} on the Premier Tour. If yours is the only team, you play one match against a computer team and the house matches your fee: win and you double it.</p>`:''}
  </details></section>`;}
 // The prize plan for a bracket of n golfers: who gets what share of the pot.
 const MPC=['#f2c230','#5b8cff']; // top golfer gold, bottom golfer blue: tracers, balls, scorecard and bracket dots
@@ -579,6 +583,27 @@ function mpGet(b,key){if(!b||!key)return null;const [r,i]=key.split(':'),R=b.rou
 const mpDiff=(h,n)=>{let d=0;h.slice(0,n).forEach(([s1,s2])=>{if(s1<s2)d++;else if(s2<s1)d--;});return d;};
 const lastName=n=>String(n||'').split(' ').slice(-1)[0];
 function mpStatus(P,a,b,d,n){return d===0?`All square${n?` thru ${n}`:''}`:`${esc(lastName(P[d>0?a:b].name))} ${Math.abs(d)} up thru ${n}`;}
+// names in a bracket: a golfer, or a team (its roster's name, with its four golfers listed small)
+const pShort=p=>p?(p.team?p.name:lastName(p.name)):'';
+const pFlag=p=>p&&!p.team?flagHTML(p.country):'';
+const pMembers=(p,num)=>p&&p.team?`<small class="sch">${p.members.map((m,j)=>(num?`${j+1} `:'')+esc(lastName(m.name))+(m.bot?'*':'')).join(', ')}</small>`:'';
+// Team Match Play before entries close: your team (up to four golfers, one fee), the teams entered and the prize money
+function tmTeams(e){const P=ui.preview&&ui.preview.eid===e.id?ui.preview.rows:[];return new Set(P.map(r=>r.g.manager_id||r.g.stable)).size;}
+function tmOpenHTML(e){const gs=mine().filter(g=>canPlay(e,g)),team=gs.filter(g=>inField(e,g)),rest=gs.filter(g=>!inField(e,g)),fee=e.test?0:e.fee,full=team.length>=4;
+  const n=tmTeams(e),others=n-(team.length?1:0),k=Math.min(rest.length,4-team.length);
+  const item=(g,inn)=>`<div class="item"><b>${esc(g.name)}${ageTag(g.yr,g.tour)}</b><span>Overall ${Math.round(ovr(g.sk))}.</span>${inn?`<span class="tag hot">In the team</span><button class="btn sm" data-act="withdraw" data-v="${e.id}" data-g="${g.id}" ${ui.busy?'disabled':''}>Take out</button>`:`<button class="btn sm" data-act="enter" data-v="${e.id}" data-g="${g.id}" ${ui.busy||full||(!team.length&&D.me.cash<fee)?'disabled':''}>Add${!team.length&&fee?` (${fmt$(fee)})`:''}</button>`}</div>`;
+  return `<section class="sec"><h2>Entries close in ${until(new Date(deadline(e)).toISOString())}</h2>
+ <p>Your team plays as one: up to four of your golfers from this level, ${fee?`one ${fmt$(fee)} fee for the whole team, paid when the first golfer goes in`:'no entry fee'}. Empty places are filled by computer regulars from the tour.</p>
+ ${!gs.length?'<p class="muted">None of your golfers play at this level.</p>':`
+ ${k&&!full?`<div class="row" style="justify-content:flex-start;flex-wrap:wrap;margin-bottom:8px"><button class="btn primary sm" data-act="enterAll" data-v="${e.id}" ${ui.busy||(!team.length&&D.me.cash<fee)?'disabled':''}>${team.length?`Add my best ${k}`:`Enter my best ${k===1?'golfer':k}${fee?` for ${fmt$(fee)}`:''}`}</button>${!team.length&&D.me.cash<fee?'<span class="muted small">Not enough money for the team fee.</span>':''}</div>`:''}
+ <h3>Your team (${team.length}/4)</h3>${team.length?`<div class="shop">${team.map(g=>item(g,true)).join('')}</div>`:'<p class="muted small">Not entered yet.</p>'}
+ ${rest.length?`<h3>${full?'Bench':'Add to your team'}</h3><div class="shop">${rest.map(g=>item(g,false)).join('')}</div>`:''}`}
+ ${flash()}</section>
+ <div class="fieldpay">${previewHTML(e)}<section class="sec paysec"><h2>Prize money</h2>${tmPayHTML(e,n)}</section></div>`;}
+function tmPayHTML(e,n){const fee=e.fee;
+  const solo=`<p><b>If yours is the only team:</b> one nine-hole match against a team of computer regulars. The house matches your fee, so a win pays ${fmt$(2*fee)} and a loss pays nothing.</p>`;
+  if(n<2)return `${solo}<p class="muted small">${n?'One team entered so far.':'No teams entered yet.'} If another manager's team enters, it becomes a knockout between the teams for the entry fees, with most of the money going to the deep runs.</p>`;
+  return `<p><b>Pot ${fmt$(fee*n)} right now</b>: ${n} teams at ${fmt$(fee)}. Every new team adds ${fmt$(fee)}.</p>${mpPlanTable(n,fee*n)}<p class="muted small">With ${n} teams it's a knockout; the two beaten semifinalists play for third.</p>`;}
 function mpView(e){const b=ui.mpb&&ui.mpb.event&&ui.mpb.event.id===e.id?ui.mpb:null;if(!b){loadMp().then(()=>{if(ui.view==='board')render();});return '<section class="sec"><p class="muted">Loading the bracket…</p></section>';}
   if(b.err)return `<section class="sec"><p class="muted">${esc(b.err)}</p></section>`;
   if(!(b.rounds||[]).length)return `<section class="teebox"><p class="eyebrow">Entries are closed</p><h2>Drawing the bracket</h2><div class="teeclock" id="teeClock" data-at="${e.starts_at}">${clockTxt(e.starts_at)}</div></section>`;
@@ -590,33 +615,34 @@ function mpMineLive(b){const P=b.players||{};for(let r=b.rounds.length-1;r>=0;r-
 // holes in one so far in a Match Play bracket (only holes already played)
 function mpAces(b){const P=b.players||{},out=[];(b.rounds||[]).forEach((Rd,r)=>Rd.m.map((x,i)=>[x,i]).concat(Rd.third?[[Rd.third,'t']]:[]).forEach(([x,i])=>(x.h||[]).forEach((hs,h)=>[0,1].forEach(sd=>{const id=sd?x.b:x.a;if(hs[sd]===1&&P[id])out.push({p:{...P[id],id,managed:true},key:`mp:${r}:${i}:${h}:${sd}`,where:`#${h+1}`});}))));return out;}
 function mpTopHTML(b,e){const P=b.players||{},fin=b.event.status==='final',started=Date.now()>=Date.parse(b.event.starts_at);
-  if(!started&&!fin)return `<section class="teebox"><p class="eyebrow">The bracket is drawn</p><h2>Tees off in</h2><div class="teeclock" id="teeClock" data-at="${e.starts_at}">${clockTxt(e.starts_at)}</div><p class="muted">${Object.keys(P).length} golfers. Pot ${fmt$(b.event.purse)}.</p></section>`;
+  if(!started&&!fin)return `<section class="teebox"><p class="eyebrow">The bracket is drawn</p><h2>Tees off in</h2><div class="teeclock" id="teeClock" data-at="${e.starts_at}">${clockTxt(e.starts_at)}</div><p class="muted">${Object.keys(P).length} ${b.team?'teams':'golfers'}. Pot ${fmt$(b.event.purse)}.${b.vsBot?' Against a computer team the house matches the fee: winner takes the pot.':''}</p></section>`;
   const ace=aceWatchHTML(mpAces(b),S().ace_bonus);
   if(fin)return mpResultsHTML(b,e)+ace;
-  return ace+`<details class="sec mppaybox"><summary>Prize money: pot ${fmt$(b.event.purse)}, ${Object.keys(P).length} golfers</summary>${mpPlanTable(Object.keys(P).length,b.event.purse)}</details>`;}
+  return ace+(b.vsBot?`<section class="sec"><p><b>Pot ${fmt$(b.event.purse)}</b>: your fee plus the house's match. Beat the computer team and it's all yours.</p></section>`:`<details class="sec mppaybox"><summary>Prize money: pot ${fmt$(b.event.purse)}, ${Object.keys(P).length} ${b.team?'teams':'golfers'}</summary>${mpPlanTable(Object.keys(P).length,b.event.purse)}</details>`);}
 function mpResultsHTML(b,e){const P=b.players||{},ids=Object.keys(P),tl=e.tour.slice(3)==='col'?'col0':e.tour.slice(3);
   let pl=b.places;if(!pl){pl=Object.keys(b.pay||{}).sort((x,y)=>b.pay[y]-b.pay[x]).map((id,i)=>({id,place:id===b.champ?'1st':i===1?'2nd':'T3',amt:b.pay[id]}));}
+  if(!pl.length)return '<section class="sec"><p class="muted">Final. Working out the prize money\u2026</p></section>';
   const paid=new Set(pl.map(x=>x.id)),R=b.rounds;
   const outIn=id=>{for(let r=0;r<R.length;r++){if(R[r].m.some(x=>x.b!==null&&x.a&&x.b&&(x.w?x.a:x.b)===id))return r;}return -1;};
   const rest=ids.filter(id=>!paid.has(id)).map(id=>({id,r:outIn(id)})).sort((x,y)=>y.r-x.r);
   const rn=r=>{const k=R[r].m.length;return k===1?'the final':k===2?'the semifinals':k===4?'the quarterfinals':`round ${r+1}`;};
-  const fm=R[R.length-1].m[0],fin=fm&&fm.res?`beat ${esc(P[fm.w?fm.a:fm.b].name)} ${esc(fm.res)} in the final`:'';
+  const fm=R[R.length-1].m[0],fin=fm&&fm.res?`beat ${esc(P[fm.w?fm.a:fm.b].name)} ${esc(fm.res)}${b.vsBot?'':' in the final'}`:'';
   const c=pl[0],cp=P[c.id];
-  const who=id=>`${flagHTML(P[id].country)}${esc(P[id].name)}${ageTag(P[id].yr,tl)}<small class="sch">${esc(P[id].stable||'')}</small>`;
-  const step=(x,k)=>x?`<div class="pod p${k}"><div class="pname">${flagHTML(P[x.id].country)}${esc(P[x.id].name)}</div><div class="psub">${esc(P[x.id].stable||'')}</div><div class="pblock"><b>${x.place}</b><span>${fmt$(x.amt)}</span></div></div>`:'';
+  const who=id=>P[id].team?`${esc(P[id].name)}${pMembers(P[id])}`:`${flagHTML(P[id].country)}${esc(P[id].name)}${ageTag(P[id].yr,tl)}<small class="sch">${esc(P[id].stable||'')}</small>`;
+  const step=(x,k)=>x?`<div class="pod p${k}"><div class="pname">${pFlag(P[x.id])}${esc(P[x.id].name)}</div><div class="psub">${P[x.id].team?(P[x.id].mid?'Team':'Computer team'):esc(P[x.id].stable||'')}</div><div class="pblock"><b>${x.place}</b><span>${fmt$(x.amt)}</span></div></div>`:'';
   const mineWon=pl.filter(x=>P[x.id].mine).reduce((a,x)=>a+x.amt,0),mineN=ids.filter(id=>P[id].mine).length;
-  return `<section class="podium-wrap"><p class="eyebrow">Final · pot ${fmt$(b.event.purse)}</p><h2 class="champ">${flagHTML(cp.country)}${esc(cp.name)} wins ${fmt$(c.amt)}</h2>
- <p class="lede">${esc(cp.stable||'')}'s golfer ${fin}.</p>
+  return `<section class="podium-wrap"><p class="eyebrow">Final · pot ${fmt$(b.event.purse)}</p><h2 class="champ">${pFlag(cp)}${esc(cp.name)} ${c.amt?`wins ${fmt$(c.amt)}`:'win'}</h2>
+ <p class="lede">${cp.team?`${cp.members.map(m=>esc(m.name)).join(', ')} ${fin}.`:`${esc(cp.stable||'')}'s golfer ${fin}.`}</p>
  <div class="podium">${step(pl[1],2)}${step(pl[0],1)}${step(pl[2],3)}</div>
- ${mineN?`<p class="mpyou">${mineWon?`Your golfers won <b>${fmt$(mineWon)}</b> between them.`:'None of your golfers reached the paying places this time.'}</p>`:''}
+ ${mineN?`<p class="mpyou">${mineWon?`${b.team?'Your team':'Your golfers'} won <b>${fmt$(mineWon)}</b>${b.team?'':' between them'}.`:b.team?'Your team didn\u2019t win any money this time.':'None of your golfers reached the paying places this time.'}</p>`:''}
  <h3>Results and prize money</h3>
- <div class="scroll"><table class="tbl mpres"><thead><tr><th>Place</th><th>Golfer</th><th class="num">Prize</th></tr></thead><tbody>
+ <div class="scroll"><table class="tbl mpres"><thead><tr><th>Place</th><th>${b.team?'Team':'Golfer'}</th><th class="num">Prize</th></tr></thead><tbody>
  ${pl.map(x=>`<tr class="${P[x.id].mine?'me':''}"><td><b>${x.place}</b></td><td>${who(x.id)}</td><td class="num"><b>${fmt$(x.amt)}</b></td></tr>`).join('')}
  ${rest.map(x=>`<tr class="nopay${P[x.id].mine?' me':''}"><td>Out</td><td>${who(x.id)}<small class="sch">Lost in ${x.r>=0?rn(x.r):'the first round'}</small></td><td class="num">$0</td></tr>`).join('')}
  </tbody></table></div></section>`;}
 function mpBracketHTML(b,e){const P=b.players||{},R=b.rounds||[],tl=e.tour.slice(3)==='col'?'col0':e.tour.slice(3);
-  const nm=id=>{const p=P[id];return p?`${flagHTML(p.country)}${esc(p.name)}${ageTag(p.yr,tl)}`:'';};
-  const st=id=>P[id]?`<small class="sch">${esc(P[id].stable||'')}</small>`:'';
+  const nm=id=>{const p=P[id];return p?(p.team?esc(p.name):`${flagHTML(p.country)}${esc(p.name)}${ageTag(p.yr,tl)}`):'';};
+  const st=id=>P[id]?(P[id].team?pMembers(P[id]):`<small class="sch">${esc(P[id].stable||'')}</small>`):'';
   const rname=r=>{const k=R[r].m.length;return k===1?'Final':k===2?'Semifinals':k===4?'Quarterfinals':`Round ${r+1}`;};
   const match=(x,r,key,label)=>{
     if(!x.a)return `<div class="mcard wait">${label?`<p class="mlab">${label}</p>`:''}<p class="muted small">Waiting for the round before to finish.</p></div>`;
@@ -628,11 +654,11 @@ function mpBracketHTML(b,e){const P=b.players||{},R=b.rounds||[],tl=e.tour.slice
     const on=ui.mpw===key,canW=Date.now()>=at||n;
     return `<div class="mcard${x.over?' done':n?' live':''}${on?' watching':''}">${label?`<p class="mlab">${label}</p>`:''}${row(x.a,0)}${row(x.b,1)}<div class="mdots">${dots}</div><div class="mfoot"><p class="mstat">${status}</p>${canW?`<button class="btn xs${on?' on':''}" data-act="mpWatch" data-v="${key}">${on?'Watching':x.over?'Replay':'Watch'}</button>`:''}</div></div>`;};
   return `${R.map((Rd,r)=>`<section class="sec mround"><h2>${Rd.third?'Final and third place':rname(r)}</h2><div class="mgrid">${Rd.m.map((x,i)=>match(x,r,`${r}:${i}`,Rd.third?'Final':'')).join('')}${Rd.third?match(Rd.third,r,`${r}:t`,'Third-place match'):''}</div></section>`).join('')}
-<p class="muted small">Each dot is a hole: gold for the top golfer, blue for the bottom one, grey for a half. Holes appear as they're played, about one every ${Math.round(b.T)} seconds. Tap Watch to follow a match shot by shot.</p>`;}
+<p class="muted small">${b.team?'* marks a computer golfer filling a place in a team. ':''}Each dot is a hole: gold for the top ${b.team?'team':'golfer'}, blue for the bottom one, grey for a half. Holes appear as they're played, about one every ${Math.round(b.T)} seconds. Tap Watch to follow a match shot by shot.</p>`;}
 
 /* ---------- Match Play: watching one match on the hole map ---------- */
 function mpWatchHTML(b,e){const k=ui.mpw,x=mpGet(b,k);if(!x||!x.a||!x.b)return '';const P=b.players||{},M=ui.ma&&ui.ma.key===k?ui.ma:{};
-  const chip=(id,side)=>`<div class="mpchip s${side}"><i class="sw s${side}"></i><span>${flagHTML(P[id].country)}<b>${esc(P[id].name)}</b><small>${esc(P[id].stable||'')}</small></span></div>`;
+  const chip=(id,side)=>`<div class="mpchip s${side}"><i class="sw s${side}"></i><span>${pFlag(P[id])}<b>${esc(P[id].name)}</b>${P[id].team?pMembers(P[id],1):`<small>${esc(P[id].stable||'')}</small>`}</span></div>`;
   const [kr,ki]=k.split(':'),nR=b.rounds[+kr].m.length,lab=ki==='t'?'Third-place match':nR===1?'The final':nR===2?'Semifinal':nR===4?'Quarterfinal':`Round ${+kr+1}`;
   return `<section class="round mpwatch" id="mpWatchBox" data-k="${k}"><div>
   <p class="eyebrow mpeye">Watching \u00b7 ${lab}</p>
@@ -643,31 +669,33 @@ function mpWatchHTML(b,e){const k=ui.mpw,x=mpGet(b,k);if(!x||!x.a||!x.b)return '
   <div class="mpvs">${chip(x.a,0)}<div class="mpst" id="mStat"></div>${chip(x.b,1)}</div>
   <div class="feed" id="mFeed" aria-live="polite"></div>
   <div id="mCard"></div>
-  <p class="muted small">Gold is ${esc(P[x.a].name)}, blue is ${esc(P[x.b].name)}. The golfer farther from the hole plays first. Tap a hole on the card to replay it.</p>
+  <p class="muted small">Gold is ${esc(P[x.a].name)}, blue is ${esc(P[x.b].name)}. ${b.team?'All eight play every hole and each team counts its best score; whoever is farthest from the hole plays first.':'The golfer farther from the hole plays first.'} Tap a hole on the card to replay it.</p>
  </div></section>`;}
 // the order the shots are played on one hole: tee shots by honour, then whoever is farther from the flag
-function mpOrder(SA,SB,h,honor){const S=[SA||[],SB||[]],idx=[0,0],out=[],pos=[(S[0][0]||{from:[0,0]}).from,(S[1][0]||{from:[0,0]}).from];
-  while(idx[0]<S[0].length||idx[1]<S[1].length){let p;
-    if(idx[honor]===0&&S[honor].length)p=honor;else if(idx[1-honor]===0&&S[1-honor].length)p=1-honor;
-    else{const left=[0,1].filter(i=>idx[i]<S[i].length);p=left.length===1?left[0]:dist(pos[0],h.pin)>=dist(pos[1],h.pin)?0:1;}
-    do{const sh=S[p][idx[p]++];out.push({p,sh});pos[p]=sh.to;if(!(sh.k==='drop'||sh.k==='pick'))break;}while(idx[p]<S[p].length);}
+// (each ball is one golfer: two in Match Play, eight in Team Match Play)
+function mpOrder(balls,h,honor){const idx=balls.map(()=>0),out=[],pos=balls.map(B=>(B.shots[0]||{from:[0,0]}).from),n=balls.length;
+  const tee=[...balls.keys()].filter(i=>balls[i].side===honor).concat([...balls.keys()].filter(i=>balls[i].side!==honor));
+  while(idx.some((k,i)=>k<balls[i].shots.length)){let p=tee.find(i=>idx[i]===0&&balls[i].shots.length);
+    if(p===undefined){let best=-1;for(let i=0;i<n;i++)if(idx[i]<balls[i].shots.length){const d=dist(pos[i],h.pin);if(best<0||d>dist(pos[best],h.pin))best=i;}p=best;}
+    do{const sh=balls[p].shots[idx[p]++];out.push({p,side:balls[p].side,sh});pos[p]=sh.to;if(!(sh.k==='drop'||sh.k==='pick'))break;}while(idx[p]<balls[p].shots.length);}
   return out;}
 const mWait=sh=>sh.holed?1000:750;
 function mpBegin(i,first){const M=ui.ma,b=ui.mpb,e=b.event,x=mpGet(b,M.key),sh=ui.mps&&ui.mps.key===M.key?ui.mps.s[i]:null;if(!x||!sh)return;
   const hole=COURSES[e.ci].holes[i%18],prev=i?x.h[i-1]:null,P=b.players;
   let honor=0;for(let j=i-1;j>=0;j--){const [p,q]=x.h[j];if(p!==q){honor=p<q?0:1;break;}}
-  M.i=i;M.h=hole;M.seq=mpOrder(sh[0],sh[1],hole,honor);M.si=0;M.t=0;M.w=0;M.cam=null;M.trail=[[],[]];M.holed=[false,false];
-  M.pos=[(sh[0][0]||{from:[0,0]}).from,(sh[1][0]||{from:[0,0]}).from];M.phase=M.seq.length?'shot':'post';
+  const balls=b.team?[0,1].flatMap(k=>(sh[k]||[]).map((shots,m)=>({side:k,mem:m,shots:shots||[]}))):[0,1].map(k=>({side:k,shots:sh[k]||[]}));
+  M.balls=balls;M.i=i;M.h=hole;M.seq=mpOrder(balls,hole,honor);M.si=0;M.t=0;M.w=0;M.cam=null;M.trail=balls.map(()=>[]);M.holed=balls.map(()=>false);
+  M.pos=balls.map(B=>(B.shots[0]||{from:[0,0]}).from);M.phase=M.seq.length?'shot':'post';
   const tot=M.seq.reduce((a,q)=>a+shotDur(q.sh)+mWait(q.sh),0)+1700;M.fit=Math.max(1,tot/(0.85*(b.T||16)*1000));
   if(first){M.shown=i-1;M.feed=[];}
-  mFeed(`Hole ${i+1}${i>=9?' (sudden death)':''}. Par ${hole.par}, ${hole.len} yards. ${esc(lastName(P[honor?x.b:x.a].name))} has the honour.`,'big');mHUD();mSide();}
+  mFeed(`Hole ${i+1}${i>=9?' (sudden death)':''}. Par ${hole.par}, ${hole.len} yards. ${esc(pShort(P[honor?x.b:x.a]))} ${b.team?'have':'has'} the honour.`,'big');mHUD();mSide();}
 function mFeed(text,cls,side){const M=ui.ma;M.feed.push({text,cls:cls||'',side});if(M.feed.length>7)M.feed.shift();mPaintFeed();}
 function mPaintFeed(){const M=ui.ma,el=document.getElementById('mFeed');
   if(M&&el)el.innerHTML=M.feed.map((q,i)=>`<p class="${q.cls}${q.side!==undefined?' s'+q.side:''}${i===M.feed.length-1?' now':''}">${q.side!==undefined?`<i class="sw s${q.side}"></i>`:''}${q.text}</p>`).join('');}
 function mHUD(){const M=ui.ma;if(!M||!M.h)return;const t=document.getElementById('mHole');if(!t)return;t.textContent=`Hole ${M.i+1}`;document.getElementById('mMeta').textContent=`Par ${M.h.par}, ${M.h.len} yards`;
   const w=ui.mpb&&ui.mpb.wind,wa=document.getElementById('windArrow');if(w&&wa)wa.style.transform=`rotate(${w.dir}rad)`;}
 function mEndHole(){const M=ui.ma,b=ui.mpb,x=mpGet(b,M.key),P=b.players;if(!x)return;const [s1,s2]=x.h[M.i]||[];
-  if(s1!==undefined){const A=esc(lastName(P[x.a].name)),B=esc(lastName(P[x.b].name)),d=mpDiff(x.h,M.i+1),n=M.i+1;
+  if(s1!==undefined){const A=esc(pShort(P[x.a])),B=esc(pShort(P[x.b])),d=mpDiff(x.h,M.i+1),n=M.i+1;
     const won=s1<s2?0:s2<s1?1:-1;
     mFeed(won<0?`Halved in ${s1}s. ${d===0?`All square thru ${n}`:`${d>0?A:B} ${Math.abs(d)} up thru ${n}`}.`:`${won?B:A} wins the hole, ${Math.min(s1,s2)} to ${Math.max(s1,s2)}. ${d===0?`All square thru ${n}`:`${d>0?A:B} ${Math.abs(d)} up thru ${n}`}.`,'big',won<0?undefined:won);
     if(x.over&&M.i===x.h.length-1)mFeed(`${esc(P[x.w?x.b:x.a].name)} wins the match ${esc(x.res)}.`,'big win',x.w);}
@@ -676,16 +704,18 @@ function mCardHTML(){const M=ui.ma,b=ui.mpb,x=mpGet(b,M.key),P=b.players,e=b.eve
   const holes=COURSES[e.ci].holes,n=Math.max(9,x.h.length),vis=M.live?(M.shown??-1)+1:x.h.length,cols=[...Array(n).keys()];
   const cell=(i,side)=>{if(i>=vis||!x.h[i])return '<td></td>';const [s1,s2]=x.h[i],s=side?s2:s1,o=side?s1:s2,d=s-holes[i%18].par,on=M.i===i;
     return `<td class="${d<=-2?'eg':d===-1?'bd':d===1?'bg':d>=2?'db':''}${s<o?' won s'+side:''}" data-act="mHole" data-v="${i}" style="cursor:pointer${on?';outline:2px solid var(--flag)':''}"><s>${s}</s></td>`;};
+  // a team's four golfers under its best-ball line, the counting score marked
+  const mem=(id,side)=>P[id]&&P[id].team&&x.ms?P[id].members.map((m,j)=>`<tr class="mmem"><td>${j+1} ${esc(lastName(m.name))}${m.bot?'*':''}</td>${cols.map(i=>{if(i>=vis||!x.ms[i])return '<td></td>';const v=x.ms[i][side][j];return `<td class="${v===x.h[i][side]?'best':''}">${v}</td>`;}).join('')}</tr>`).join(''):'';
   const stat=i=>{if(i>=vis||!x.h[i])return '<td></td>';const d=mpDiff(x.h,i+1);return d===0?'<td class="mst">AS</td>':`<td class="mst s${d>0?0:1}">${Math.abs(d)}<small>up</small></td>`;};
   return `<div class="scroll"><table class="card mpcard"><tr><th>Hole</th>${cols.map(i=>`<th>${i+1}</th>`).join('')}</tr>
   <tr><td>Par</td>${cols.map(i=>`<td>${holes[i%18].par}</td>`).join('')}</tr>
-  <tr class="pa"><td><i class="sw s0"></i>${esc(lastName(P[x.a].name))}</td>${cols.map(i=>cell(i,0)).join('')}</tr>
-  <tr class="pb"><td><i class="sw s1"></i>${esc(lastName(P[x.b].name))}</td>${cols.map(i=>cell(i,1)).join('')}</tr>
+  <tr class="pa"><td><i class="sw s0"></i>${esc(pShort(P[x.a]))}</td>${cols.map(i=>cell(i,0)).join('')}</tr>${mem(x.a,0)}
+  <tr class="pb"><td><i class="sw s1"></i>${esc(pShort(P[x.b]))}</td>${cols.map(i=>cell(i,1)).join('')}</tr>${mem(x.b,1)}
   <tr><td>Match</td>${cols.map(stat).join('')}</tr></table></div>`;}
 function mSide(){const M=ui.ma,el=document.getElementById('mCard');if(!M||!el)return;el.innerHTML=mCardHTML();
   const b=ui.mpb,x=mpGet(b,M.key),st=document.getElementById('mStat');
   if(x&&st){const vis=M.live?(M.shown??-1)+1:x.h.length,d=mpDiff(x.h,vis),P=b.players;
-    st.innerHTML=x.over&&vis>=x.h.length?`<b class="s${x.w}">${esc(lastName(P[x.w?x.b:x.a].name))} wins ${esc(x.res)}</b>`:d===0?`<b>${vis?'All square':'All square'}</b><small>${vis?`thru ${vis}`:'first tee'}</small>`:`<b class="s${d>0?0:1}">${Math.abs(d)} up</b><small>${esc(lastName(P[d>0?x.a:x.b].name))} thru ${vis}</small>`;}
+    st.innerHTML=x.over&&vis>=x.h.length?`<b class="s${x.w}">${esc(pShort(P[x.w?x.b:x.a]))} win${P[x.a].team?'':'s'} ${esc(x.res)}</b>`:d===0?`<b>${vis?'All square':'All square'}</b><small>${vis?`thru ${vis}`:'first tee'}</small>`:`<b class="s${d>0?0:1}">${Math.abs(d)} up</b><small>${esc(pShort(P[d>0?x.a:x.b]))} thru ${vis}</small>`;}
   const pb=document.getElementById('mPauseBtn');if(pb)pb.textContent=M.paused?'Play':'Pause';}
 // keep the animation in step with the holes the bracket has revealed so far
 function mpSync(){const k=ui.mpw;if(!k||!document.getElementById('mcv')){return;}
@@ -709,14 +739,14 @@ function mFrame(ts){const M=ui.ma,cv=document.getElementById('mcv');if(ui.view!=
   const b=ui.mpb,x=mpGet(b,M.key),avail=x?Math.min(x.h.length,(ui.mps&&ui.mps.key===M.key?ui.mps.s.length:0)):0,behind=M.live&&x&&!x.over&&avail-1>M.i+1;
   const dt=M.paused?0:Math.min(60,ts-mTs)*(M.speed||1)*(M.live?(M.fit||1)*(behind?2:1):1);mTs=ts;
   if(M.seq&&M.seq.length){const q=M.seq[M.si];
-    if(M.phase==='shot'){M.t+=dt/shotDur(q.sh);if(M.t>=1){M.t=1;mFeed(esc(q.sh.text),'',q.p);if(q.sh.k!=='drop'&&q.sh.k!=='pick')M.trail[q.p].push(q.sh);M.pos[q.p]=q.sh.to;if(q.sh.holed)M.holed[q.p]=true;M.phase='wait';M.w=0;}}
+    if(M.phase==='shot'){M.t+=dt/shotDur(q.sh);if(M.t>=1){M.t=1;const Bq=M.balls[q.p],tp=b.team&&b.players[Bq.side?x.b:x.a];mFeed(`${tp?`<b>${Bq.mem+1} ${esc(lastName(tp.members[Bq.mem].name))}:</b> `:''}${esc(q.sh.text)}`,'',q.side);if(q.sh.k!=='drop'&&q.sh.k!=='pick')M.trail[q.p].push(q.sh);M.pos[q.p]=q.sh.to;if(q.sh.holed)M.holed[q.p]=true;M.phase='wait';M.w=0;}}
     else if(M.phase==='wait'){M.w+=dt;if(M.w>mWait(q.sh)){M.si++;if(M.si>=M.seq.length){M.si=M.seq.length-1;mEndHole();}else{M.phase='shot';M.t=0;}}}
     else if(M.phase==='post'){M.w+=dt;if(M.w>1700){M.phase='idle';if(M.live)mpSync();}}}
   else if(M.phase==='post'){M.w+=dt;if(M.w>1700){M.phase='idle';if(M.live)mpSync();}}
   mDraw(dt);requestAnimationFrame(mFrame);}
 function mDraw(dt){const M=ui.ma,cv=document.getElementById('mcv');if(!cv||!M.h)return;const c=cv.getContext('2d'),W=cv.width,H=cv.height,h=M.h;
   const q=M.seq&&M.seq.length?M.seq[Math.min(M.si,M.seq.length-1)]:null,moving=!!q&&M.phase==='shot',ez=moving?1-Math.pow(1-M.t,2.2):1;
-  const focus=q?(moving?q.sh.from:q.sh.to):[0,0],nearG=M.pos?[0,1].every(p=>M.holed[p]||dist(M.pos[p],h.green)<=52)&&dist(focus,h.green)<=52:false;
+  const focus=q?(moving?q.sh.from:q.sh.to):[0,0],nearG=M.pos?M.pos.every((pp,p)=>M.holed[p]||dist(pp,h.green)<=52)&&dist(focus,h.green)<=52:false;
   const tgt=camFor({h},nearG,cv);if(!M.cam)M.cam=tgt;else{const k=1-Math.exp(-(dt||16)/260);M.cam={x:M.cam.x+(tgt.x-M.cam.x)*k,y:M.cam.y+(tgt.y-M.cam.y)*k,s:M.cam.s+(tgt.s-M.cam.s)*k};}
   const cam=M.cam,X=v=>(v-cam.x)*cam.s+W/2,Y=v=>H/2-(v-cam.y)*cam.s,Sc=cam.s,u=Math.max(W/55,5);
   drawCourse(c,W,H,h,X,Y,Sc);
@@ -724,15 +754,17 @@ function mDraw(dt){const M=ui.ma,cv=document.getElementById('mcv');if(!cv||!M.h)
   // tracers: a dark edge under each golfer's colour so both read on grass, sand and water
   const seg=(s,to,col)=>{c.beginPath();c.moveTo(X(s.from[0]),Y(s.from[1]));c.lineTo(X(to[0]),Y(to[1]));c.strokeStyle='rgba(16,32,26,.55)';c.lineWidth=Math.max(3,u*.34);c.stroke();c.strokeStyle=col;c.lineWidth=Math.max(2,u*.2);c.stroke();};
   c.lineCap='round';
-  if(M.trail)for(const p of [0,1])for(const s of M.trail[p])seg(s,s.to,MPC[p]);
-  let ball=null;if(moving&&q.sh.k!=='drop'&&q.sh.k!=='pick'){ball=lerp(q.sh.from,q.sh.to,ez);seg(q.sh,ball,MPC[q.p]);}
+  if(M.trail)M.trail.forEach((tr,p)=>{for(const s of tr)seg(s,s.to,MPC[M.balls[p].side]);});
+  let ball=null;if(moving&&q.sh.k!=='drop'&&q.sh.k!=='pick'){ball=lerp(q.sh.from,q.sh.to,ez);seg(q.sh,ball,MPC[q.side]);}
   if(!M.pos)return;
-  for(const p of [0,1]){if(M.holed[p]&&!(moving&&q.p===p))continue;const at=moving&&q.p===p?(ball||q.sh.from):M.pos[p];
+  for(let p=0;p<M.pos.length;p++){if(M.holed[p]&&!(moving&&q.p===p))continue;const at=moving&&q.p===p?(ball||q.sh.from):M.pos[p];
     const air=moving&&q.p===p&&q.sh.k!=='putt'&&q.sh.k!=='drop'?Math.sin(Math.PI*M.t):0,lift=air*Math.min(H*.09,dist(q.sh.from,q.sh.to)*Sc*.16);
     const drop=moving&&q.p===p&&q.sh.holed&&M.t>.88?Math.max(0,1-(M.t-.88)/.12):1,br=u*.42*(1+air*.7)*drop;if(br<=.2)continue;
     const bx=X(at[0]),by=Y(at[1]);c.fillStyle='rgba(0,0,0,.3)';c.beginPath();c.ellipse(bx+lift*.3,by+u*.12,br,br*.6,0,0,6.3);c.fill();
-    c.fillStyle='#fff';c.strokeStyle=MPC[p];c.lineWidth=Math.max(2,u*.22);c.beginPath();c.arc(bx,by-lift,br,0,6.3);c.fill();c.stroke();}
-  if(q&&q.sh.holed&&M.phase==='wait'&&M.w<1000){const hw=M.w/1000;c.strokeStyle=MPC[q.p];c.globalAlpha=1-hw;c.lineWidth=Math.max(2,u*.22);c.beginPath();c.arc(px,py,u*(.6+hw*3.2),0,6.3);c.stroke();c.globalAlpha=1;}}
+    c.fillStyle='#fff';c.strokeStyle=MPC[M.balls[p].side];c.lineWidth=Math.max(2,u*.22);c.beginPath();c.arc(bx,by-lift,br,0,6.3);c.fill();c.stroke();
+    // in a team match, each ball carries its golfer's number in the team (1 to 4)
+    if(M.balls[p].mem!==undefined&&br>u*.3){c.fillStyle='#10201a';c.font=`700 ${Math.round(br*1.25)}px system-ui,sans-serif`;c.textAlign='center';c.textBaseline='middle';c.fillText(String(M.balls[p].mem+1),bx,by-lift+br*.05);}}
+  if(q&&q.sh.holed&&M.phase==='wait'&&M.w<1000){const hw=M.w/1000;c.strokeStyle=MPC[q.side];c.globalAlpha=1-hw;c.lineWidth=Math.max(2,u*.22);c.beginPath();c.arc(px,py,u*(.6+hw*3.2),0,6.3);c.stroke();c.globalAlpha=1;}}
 // Buying takes two taps: "Sign him", then a confirm button with the price on it.
 function buyBtn(m,full,label){const off=full||D.me.cash<m.ask||ui.busy;
   if(ui.buyAsk===m.id&&!off)return `<span class="buyask"><span>Sign ${esc(m.name)} for <b>${fmt$(m.ask)}</b>?</span><button class="btn sm primary" data-act="buyOk" data-v="${m.id}">Confirm buy</button><button class="btn sm" data-act="buyNo">Cancel</button></span>`;
@@ -889,7 +921,7 @@ if(SB){
   // keep things fresh: the world every 30 seconds, an open board every 5
   setInterval(()=>{if(D.user&&D.me&&!ui.busy&&!['auth','join','scout','admin','news'].includes(ui.view)&&!document.hidden){const a=document.activeElement;if(a&&/INPUT|SELECT/.test(a.tagName))return;load().then(()=>{if(ui.view!=='board')render();}).catch(()=>{});}},30000);
   setInterval(()=>{if(ui.view!=='board'||document.hidden)return;const e=evNow();
-    if(e&&isM(e)&&phase(e)!=='open'){loadMp().then(mpPoll);return;}
+    if(e&&isB(e)&&phase(e)!=='open'){loadMp().then(mpPoll);return;}
     if(e&&phase(e)==='open'){(Date.now()%15000<5000?loadPreview(e):Promise.resolve()).then(()=>{const a=document.activeElement;if(!(a&&a.tagName==='SELECT'))keepScroll(render);});return;}
     const was=ui.board&&ui.board.event&&ui.board.event.status,hadPlayers=ui.board&&ui.board.players&&ui.board.players.length;
     loadBoard().then(()=>{const a=document.activeElement;if(a&&a.tagName==='SELECT')return;const e2=evNow(),bb=document.getElementById('boardBox');
