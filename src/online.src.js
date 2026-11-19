@@ -534,7 +534,7 @@ function drawGolfer(c,X,Y,u,sh,T,col,fade){if(fade<=0||sh.k==='drop'||sh.k==='pi
 function panel(c,x,y,w,h,title,u){c.save();c.fillStyle='rgba(12,22,17,.72)';c.strokeStyle='rgba(255,255,255,.18)';c.lineWidth=1;c.beginPath();if(c.roundRect)c.roundRect(x,y,w,h,u*.5);else c.rect(x,y,w,h);c.fill();c.stroke();
   c.fillStyle='rgba(255,255,255,.7)';c.font=`600 ${Math.round(u*.85)}px 'Barlow Condensed','Arial Narrow',sans-serif`;c.textAlign='left';c.textBaseline='top';c.fillText(title,x+u*.5,y+u*.35);c.restore();}
 // the swing camera: the golfer side-on (facing us), the full swing from address to the finish
-function drawSwingCam(c,x,y,w,h,u,sh,T,col,who){if(sh.k==='drop'||sh.k==='pick')return;if(drawSwing3D(c,x,y,w,h,u,sh,T,col,who))return;panel(c,x,y,w,h,'SWING',u);
+function drawSwingCam(c,x,y,w,h,u,sh,T,col,who,ms){if(sh.k==='drop'||sh.k==='pick')return;if(drawSwing3D(c,x,y,w,h,u,sh,T,col,who,ms))return;panel(c,x,y,w,h,'SWING',u);
   const P=swingPose(T,sh.k),k=h/118,gy=y+h-8*k,cx=x+w*.5,rad=v=>v*Math.PI/180;
   c.save();c.beginPath();c.rect(x,y,w,h);c.clip();c.lineCap='round';c.lineJoin='round';
   c.strokeStyle='rgba(140,196,116,.6)';c.lineWidth=2*k;c.beginPath();c.moveTo(x+4*k,gy);c.lineTo(x+w-4*k,gy);c.stroke();
@@ -677,9 +677,13 @@ function g3LoadModel(){const g=G3;if(!g||g.fail||g.M||g.mLoading)return;const T3
     const mix=new T3.AnimationMixer(m),clips={};
     Object.keys(G3M).forEach((n,i)=>{const a=mix.clipAction(an[i].animations[0]);a.play();a.enabled=false;clips[n]=a;});
     g.M={root,rig,m,mix,clips,shirt,U,B:n=>m.getObjectByName('mixamorig'+n),cal:{}};}).catch(()=>{});}
-function g3At(n,t){const M=G3.M;Object.keys(M.clips).forEach(x=>{M.clips[x].enabled=x===n;});M.clips[n].time=t;M.mix.update(0);M.root.updateMatrixWorld(true);}
+function g3At(n,t){const M=G3.M;
+  // undo last frame's arm adjustments first: the mixer only rewrites a bone when its animated value changes, so they would otherwise pile up
+  if(M.ik){M.ik.forEach(([b,q])=>b.quaternion.copy(q));M.ik=null;}Object.keys(M.clips).forEach(x=>{M.clips[x].enabled=x===n;});M.clips[n].time=t;M.mix.update(0);M.root.updateMatrixWorld(true);}
 // the grip: between the two hands, a little along the fingers
-function g3Grip(){const M=G3.M,T3=G3.T3,w=n=>M.B(n).getWorldPosition(new T3.Vector3());return w('LeftHandMiddle1').add(w('RightHandMiddle1')).multiplyScalar(.5);}
+function g3Grip(){const M=G3.M,T3=G3.T3,w=n=>M.B(n).getWorldPosition(new T3.Vector3()),g=w('LeftHandMiddle1').add(w('RightHandMiddle1')).multiplyScalar(.5);
+  // the capture's hands sit close in; the club is held a little further out along the arms, so he stands further from the ball with his arms extended
+  return g.addScaledVector(g.clone().sub(w('Spine2')).normalize(),.1);}
 // stand him on the ground at the origin; then, at each key moment, note how the shaft sits in his left hand, so between keys it turns with his wrists
 function g3Cal(n,type){const M=G3.M,T3=G3.T3,c=G3M[n],L=G3CLUB[type].L,w=b=>M.B(b).getWorldPosition(new T3.Vector3()),qh=()=>M.B('LeftHand').getWorldQuaternion(new T3.Quaternion());
   M.root.rotation.set(0,c.ry,0);M.root.position.set(0,0,0);g3At(n,c.k[0]);const lf=w('LeftToeBase'),rf=w('RightToeBase'),mid=lf.clone().add(rf).multiplyScalar(.5);
@@ -701,22 +705,23 @@ const AFRICA='AO BJ BW BF BI CV CM CF TD KM CG CD CI DJ GQ ER SZ ET GA GM GH GN 
 function g3Look(who){const id=String(who&&who.id||''),reg=G3REG[who&&who.country]||(AFRICA.includes(who&&who.country)?'af':'mix'),L=G3LOOK[reg];let hs=7;for(const ch of id)hs=(hs*31+ch.charCodeAt(0))>>>0;
   return {skin:L[0][hs%L[0].length],hair:L[1][(hs>>>8)%L[1].length]};}
 // two-bone reach: turn the forearm and upper arm so the palm lands on a point (the club's grip)
-function g3Reach(sd,tgt){const M=G3.M,T3=G3.T3,eff=M.B(sd+'HandMiddle1');for(let it=0;it<3;it++)for(const bn of ['ForeArm','Arm']){const b=M.B(sd+bn),bp=b.getWorldPosition(new T3.Vector3()),v1=eff.getWorldPosition(new T3.Vector3()).sub(bp).normalize(),v2=tgt.clone().sub(bp).normalize();
+function g3Reach(sd,tgt){const M=G3.M,T3=G3.T3,eff=M.B(sd+'HandMiddle1');M.ik=M.ik||[];['ForeArm','Arm'].forEach(bn=>{const b=M.B(sd+bn);if(!M.ik.some(x=>x[0]===b))M.ik.push([b,b.quaternion.clone()]);});for(let it=0;it<3;it++)for(const bn of ['ForeArm','Arm']){const b=M.B(sd+bn),bp=b.getWorldPosition(new T3.Vector3()),v1=eff.getWorldPosition(new T3.Vector3()).sub(bp).normalize(),v2=tgt.clone().sub(bp).normalize();
   if(v1.dot(v2)>.99999)continue;const q=new T3.Quaternion().setFromUnitVectors(v1,v2),wq=b.getWorldQuaternion(new T3.Quaternion()),pq=b.parent.getWorldQuaternion(new T3.Quaternion());b.quaternion.copy(pq.invert().multiply(q.multiply(wq)));b.updateMatrixWorld(true);}}
-function g3PoseModel(T,k,sh,col,who){const g=G3,M=g.M,T3=g.T3,P=g.P,n=k==='putt'?'Putt':k==='chip'?'Chip':'Drive',c=G3M[n],K=c.k;
+function g3PoseModel(T,k,sh,col,who,ms){const g=G3,M=g.M,T3=g.T3,P=g.P,n=k==='putt'?'Putt':k==='chip'?'Chip':'Drive',c=G3M[n],K=c.k;
   // everything is worked out with the rig at the origin (the swing camera's frame), then the rig is put back where it stands
   const rp=M.rig.position.clone(),rq=M.rig.quaternion.clone();M.rig.position.set(0,0,0);M.rig.quaternion.identity();M.rig.updateMatrixWorld(true);
   const type=k==='putt'?'putter':k==='chip'?'wedge':/^Driver/i.test(sh.text||'')?'driver':isWood(sh)?'wood':/wedge|^PW|^SW|^LW|^GW/i.test(sh.text||'')?'wedge':'iron';
   const key=n+type,cal=M.cal[key]||(M.cal[key]=g3Cal(n,type));M.clubs=M.clubs||{};const club=M.clubs[type]||(M.clubs[type]=g3Club(type));
   Object.values(M.clubs).forEach(x=>{x.visible=x===club;});P.shaft.visible=P.clubHead.visible=false;
-  const t=T<=.58?K[0]+(K[1]-K[0])*T/.58:T<=.75?K[1]+(K[2]-K[1])*(T-.58)/.17:K[2]+(K[3]-K[2])*Math.min(1,(T-.75)/.25);
+  let t=T<=.58?K[0]+(K[1]-K[0])*T/.58:T<=.75?K[1]+(K[2]-K[1])*(T-.58)/.17:K[2]+(K[3]-K[2])*Math.min(1,(T-.75)/.25);
+  // given the time since the swing began, play the capture at one steady speed (impact lands on the game's moment of impact)
+  if(ms!=null){const sw=swingMs(sh)||1,rate=(K[2]-K[0])/sw;t=Math.min(K[3],K[0]+ms*rate);T=t<=K[2]?.75*(t-K[0])/(K[2]-K[0]):.75+.25*(t-K[2])/(K[3]-K[2]);}
   M.root.rotation.set(0,c.ry,0);M.root.position.copy(cal.off);g3At(n,t);M.shirt.forEach(mt=>mt.color.set(col));const lk=g3Look(who);M.U.skin.value.set(lk.skin).convertSRGBToLinear();M.U.hair.value.set(lk.hair).convertSRGBToLinear();
   const grip=g3Grip(),qh=M.B('LeftHand').getWorldQuaternion(new T3.Quaternion()),ks=cal.keys;let dir,org;
   if(k==='putt'){// a putter rides with the hands like a pendulum, low to the ground
     org=cal.aim.clone().addScaledVector(grip.clone().sub(cal.grip),1.25);org.y=Math.min(.14,Math.max(cal.aim.y,cal.aim.y+(grip.y-cal.grip.y)*1.25));dir=org.clone().sub(grip).normalize();}
-  else{let i=0;while(i<ks.length-2&&t>ks[i+1].t)i++;const u=Math.max(0,Math.min(1,(t-ks[i].t)/(ks[i+1].t-ks[i].t))),e=u*u*(3-2*u);
-    dir=ks[i].l.clone().lerp(ks[i+1].l,e).normalize().applyQuaternion(qh);
-    const wz=Math.max(0,1-Math.abs(T-.75)/.05);if(wz>0)dir.lerp(cal.aim.clone().sub(grip).normalize(),wz).normalize();
+  else{let i=0;while(i<ks.length-2&&t>ks[i+1].t)i++;const u=Math.max(0,Math.min(1,(t-ks[i].t)/(ks[i+1].t-ks[i].t))),p0=ks[Math.max(0,i-1)].l,p1=ks[i].l,p2=ks[i+1].l,p3=ks[Math.min(ks.length-1,i+2)].l,u2=u*u,u3=u2*u;
+    dir=new T3.Vector3().addScaledVector(p0,-.5*u3+u2-.5*u).addScaledVector(p1,1.5*u3-2.5*u2+1).addScaledVector(p2,-1.5*u3+2*u2+.5*u).addScaledVector(p3,.5*u3-.5*u2).normalize().applyQuaternion(qh);
     org=grip.clone().addScaledVector(dir,cal.R);}
   // the face: square at address and impact, turning with the hands in between
   const f=new T3.Vector3(1,0,0).applyQuaternion(qh.clone().multiply(cal.qa.clone().invert())),sq=k==='putt'?1:Math.max(0,1-Math.min(Math.abs(T)/.25,Math.abs(T-.75)/.12));
@@ -729,9 +734,9 @@ function g3PoseModel(T,k,sh,col,who){const g=G3,M=g.M,T3=g.T3,P=g.P,n=k==='putt'
   const b=cal.ball;if(T<.75){P.ballM.position.copy(b);P.ballM.visible=true;}else{const q=Math.min(1,(T-.75)/.12);P.ballM.position.set(b.x+q*(k==='putt'?.8:3),b.y+q*(k==='putt'?0:k==='full'?2.2:.8),b.z-q*1.5);P.ballM.visible=q<1;}
   M.rig.position.copy(rp);M.rig.quaternion.copy(rq);M.rig.updateMatrixWorld(true);return cal;}
 // render the 3D swing into a panel; returns false if 3D isn't available (the flat drawing is used instead)
-function drawSwing3D(c,x,y,w,h,u,sh,T,col,who){loadThree();const g=g3Init();if(!g||g.fail)return false;
+function drawSwing3D(c,x,y,w,h,u,sh,T,col,who,ms){loadThree();const g=g3Init();if(!g||g.fail)return false;
   g3LoadModel();const real=!!g.M;Object.keys(g.P).forEach(n=>{if(!/^(shaft|clubHead|ballM)$/.test(n))g.P[n].visible=!real;});
-  if(real){g.M.root.visible=true;g.scene.add(g.M.rig);g.M.rig.visible=true;g.M.rig.position.set(0,0,0);g.M.rig.rotation.set(0,0,0);g3PoseModel(T,sh.k,sh,col,who);}else{g.P.shaft.visible=g.P.clubHead.visible=true;g3Pose(T,sh.k,isWood(sh),col);}g.rd.render(g.scene,g.cam);
+  if(real){g.M.root.visible=true;g.scene.add(g.M.rig);g.M.rig.visible=true;g.M.rig.position.set(0,0,0);g.M.rig.rotation.set(0,0,0);g3PoseModel(T,sh.k,sh,col,who,ms);}else{g.P.shaft.visible=g.P.clubHead.visible=true;g3Pose(T,sh.k,isWood(sh),col);}g.rd.render(g.scene,g.cam);
   c.save();c.beginPath();if(c.roundRect)c.roundRect(x,y,w,h,u*.5);else c.rect(x,y,w,h);c.clip();
   const sw=g.cv.width,shh=g.cv.height,s=Math.max(w/sw,h/shh);c.drawImage(g.cv,x+(w-sw*s)/2,y+(h-shh*s)/2,sw*s,shh*s);c.restore();
   c.save();c.strokeStyle='rgba(255,255,255,.25)';c.lineWidth=1;c.beginPath();if(c.roundRect)c.roundRect(x,y,w,h,u*.5);else c.rect(x,y,w,h);c.stroke();
@@ -757,7 +762,7 @@ function drawFaceMap(c,x,y,w,h,u,sh,show){if(!sh.q||sh.k==='putt'||sh.k==='drop'
   c.fillStyle=good?'#7ee08f':ok?'#f2c84b':'#f08a6c';c.fillText(`${tag.toUpperCase()} · ${q[2]}`,cx,y+h-u*.45);}
 // both panels for the shot being played: swing camera bottom left, strike map bottom right
 function drawShotPanels(c,W,H,u,sh,P,live,col,who,noSwing){if(!sh||sh.k==='drop'||sh.k==='pick')return;const pw=Math.min(W*.28,H*.23),sw=Math.min(W*.34,H*.27),T=swingT(P,live);
-  if(!noSwing)drawSwingCam(c,u*.5,H-sw*1.25-u*.5,sw,sw*1.25,u,sh,T,col,who);
+  if(!noSwing)drawSwingCam(c,u*.5,H-sw*1.25-u*.5,sw,sw*1.25,u,sh,T,col,who,live?P.sw*swingMs(sh)+P.f*flightMs(sh):null);
   if(noSwing&&live&&P.f<=0)return;drawFaceMap(c,W-pw-u*.5,H-pw*.95-u*.5,pw,pw*.95,u,sh,!live||P.f>0);}
 function drawFlag(c,px,py,u){c.strokeStyle='#10201a';c.lineWidth=Math.max(1.5,u*.14);c.beginPath();c.moveTo(px,py);c.lineTo(px,py-u*2.2);c.stroke();
   c.fillStyle='#e3b420';c.beginPath();c.moveTo(px,py-u*2.2);c.lineTo(px+u*1.3,py-u*1.75);c.lineTo(px,py-u*1.3);c.fill();}
@@ -769,7 +774,7 @@ function c3Init(){if(C3)return C3;loadThree();const g=g3Init();if(!g||g.fail)ret
   let rd;try{rd=new T3.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});}catch(e){C3={fail:true};return C3;}
   rd.setPixelRatio(1);rd.shadowMap.enabled=true;rd.shadowMap.type=T3.PCFSoftShadowMap;
   const scene=new T3.Scene(),sky='#a9cde8';scene.background=new T3.Color(sky);scene.fog=new T3.Fog(sky,180,900);
-  const cam=new T3.PerspectiveCamera(42,1,.1,2500);
+  const cam=new T3.PerspectiveCamera(42,1,.3,1600);
   scene.add(new T3.HemisphereLight('#e4f1ff','#3d6b38',.48));
   const sun=new T3.DirectionalLight('#fff3dc',.72);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-45,right:45,top:45,bottom:-45,near:1,far:400});sun.shadow.bias=-.0004;
   scene.add(sun);scene.add(sun.target);
@@ -787,15 +792,15 @@ function c3Fairway(h){const L=[],Rr=[];for(let d=h.fs0;d<=h.fs1+.01;d+=4){const 
   const ends=Math.min(1,(d-h.fs0)/18,(h.fs1-d)/18),w=h.fw*(1+.16*Math.sin(d/31+hRand(h,3)*6)+.08*Math.sin(d/13+hRand(h,4)*6))*(.55+.45*ends);L.push([q[0]+nx*w,q[1]+ny*w]);Rr.push([q[0]-nx*w,q[1]-ny*w]);}
   return L.concat(Rr.reverse());}
 // a flat patch of turf from an outline, a hair above the one below so the layers never flicker
-function c3Patch(pts,y,mat){const T3=C3.T3,s=new T3.Shape(pts.map(p=>new T3.Vector2(p[0]*C3K,p[1]*C3K))),geo=new T3.ShapeGeometry(s,2);geo.rotateX(-Math.PI/2);
+function c3Patch(pts,y,mat){const rank=Math.round(y*1000);mat.polygonOffset=true;mat.polygonOffsetFactor=-rank/8;mat.polygonOffsetUnits=-rank/2;y=rank*.0006;const T3=C3.T3,s=new T3.Shape(pts.map(p=>new T3.Vector2(p[0]*C3K,p[1]*C3K))),geo=new T3.ShapeGeometry(s,2);geo.rotateX(-Math.PI/2);
   const uv=geo.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i),uv.getY(i));const m=new T3.Mesh(geo,mat);m.position.y=y;m.receiveShadow=true;return m;}
 function c3Hole(h){if(C3.holes.has(h))return C3.holes.get(h);const T3=C3.T3,G=new T3.Group(),M=(c,o)=>new T3.MeshStandardMaterial(Object.assign({color:c,roughness:1},o||{}));
   // rough: a corridor along the hole and round the green
-  const rough=M('#3b7243'),pts=h.pts;for(let i=0;i<pts.length-1;i++){const a=c3W(pts[i]),b=c3W(pts[i+1]),len=a.distanceTo(b),w=2*h.tree*C3K,m=new T3.Mesh(new T3.PlaneGeometry(w,len+w),rough);
-    m.rotation.x=-Math.PI/2;m.rotation.z=Math.atan2(b.x-a.x,-(b.z-a.z));m.position.set((a.x+b.x)/2,.01,(a.z+b.z)/2);m.receiveShadow=true;G.add(m);}
+  const rough=M('#3b7243',{polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-4}),pts=h.pts;for(let i=0;i<pts.length-1;i++){const a=c3W(pts[i]),b=c3W(pts[i+1]),len=a.distanceTo(b),w=2*h.tree*C3K,m=new T3.Mesh(new T3.PlaneGeometry(w,len+w),rough);
+    m.rotation.x=-Math.PI/2;m.rotation.z=Math.atan2(b.x-a.x,-(b.z-a.z));m.position.set((a.x+b.x)/2,.0015,(a.z+b.z)/2);m.receiveShadow=true;G.add(m);}
   G.add(c3Patch(c3Blob(h,h.green[0],h.green[1],h.tree,1,.12,1.15,hRand(h,2)*3),.012,rough));
   const st=C3.stripeTex('#5d9c4c','#69a856',2);st.repeat.set(1/16,1/16);G.add(c3Patch(c3Fairway(h),.02,M('#ffffff',{map:st})));
-  const tee=new T3.Mesh(new T3.BoxGeometry(12*C3K,.12,10*C3K),M(MAP.tee));tee.position.set(0,.04,-1*C3K);tee.receiveShadow=true;G.add(tee);
+  const tee=c3Patch([[-6,-6],[6,-6],[6,4],[-6,4]],.022,M('#6aa957'));tee.receiveShadow=true;G.add(tee);
   h.water.forEach((w,i)=>{G.add(c3Patch(c3Blob(h,w.x,w.y,Math.sqrt(w.rx*w.ry),20+i,.06,w.rx/w.ry,-w.rot),.026,M('#2f7fb3',{roughness:.12,metalness:.25})));});
   const gRot=hRand(h,5)*3.1,gEl=1+hRand(h,6)*.18,gs=C3.stripeTex('#7fbf62','#8bc96d',2);gs.repeat.set(1/5,1/5);gs.rotation=gRot+.6;
   G.add(c3Patch(c3Blob(h,h.green[0],h.green[1],h.gr+3,7,.09,gEl,gRot),.03,M('#6faf58')));G.add(c3Patch(c3Blob(h,h.green[0],h.green[1],h.gr,7,.09,gEl,gRot),.034,M('#ffffff',{map:gs})));
@@ -828,8 +833,8 @@ function drawHole3D(dt){const A=ui.anim,cv=document.getElementById('cv');if(!cv|
   const from=c3W(sh.from),to=c3W(sh.to),pinW=c3W(h.pin);let dir=to.clone().sub(from);dir.y=0;if(dir.lengthSq()<.01)dir=pinW.clone().sub(from).setY(0);if(dir.lengthSq()<.01)dir.set(0,0,-1);dir.normalize();
   // the golfer, standing to his ball, swinging
   const M=G3.M,swingShot=sh.k!=='drop'&&sh.k!=='pick',T=moving?swingT(P,true):1;let ballLocal=null;
-  if(M){c3.scene.add(M.rig);M.root.visible=true;M.rig.visible=swingShot&&(moving||A.phase==='wait');if(M.rig.visible){const cal=g3PoseModel(T,sh.k,sh,gcol,wg);ballLocal=cal.ball;
-      const a=Math.atan2(-dir.z,dir.x);M.rig.rotation.set(0,a,0);const off=cal.ball.clone().setY(0).applyAxisAngle(new T3.Vector3(0,1,0),a);M.rig.position.set(from.x-off.x,0,from.z-off.z);M.rig.updateMatrixWorld(true);}}
+  if(M){c3.scene.add(M.rig);M.root.visible=true;M.rig.visible=swingShot&&(moving||A.phase==='wait');if(M.rig.visible){const cal=g3PoseModel(T,sh.k,sh,gcol,wg,moving?A.t*shotDur(sh):shotDur(sh)+(A.w||0));ballLocal=cal.ball;
+      const a=Math.atan2(-dir.z,dir.x);M.rig.rotation.set(0,a,0);const off=cal.ball.clone().setY(0).applyAxisAngle(new T3.Vector3(0,1,0),a);M.rig.position.set(from.x-off.x,.012,from.z-off.z);M.rig.updateMatrixWorld(true);}}
   // the ball and its tracer
   const flying=moving&&P.f>0,landed=!moving,bp=flying||landed?c3BallAt(sh,landed?1:e):from.clone().setY(ballLocal?ballLocal.y:0);bp.y+=.0215;
   const holedNow=sh.holed&&(landed||P.f>.92);c3.ball.visible=!holedNow;c3.ball.position.copy(bp);
@@ -841,7 +846,9 @@ function drawHole3D(dt){const A=ui.anim,cv=document.getElementById('cv');if(!cv|
   const shotKey=trailKey+'|'+si,nearGreen=dist(sh.from,h.green)<h.gr+18,toPin=pinW.clone().sub(bp).setY(0);if(toPin.lengthSq()<.01)toPin.copy(dir);toPin.normalize();
   const right=new T3.Vector3(-dir.z,0,dir.x),U=y=>new T3.Vector3(0,y,0),full=sh.k==='full',onGreen=sh.k==='putt'||nearGreen;let pos,look;
   // down the line behind the golfer; for the flight the camera rises and drifts toward where the ball will land, always watching it
-  const addr=onGreen?from.clone().addScaledVector(toPin,-6.5).addScaledVector(right,.6).add(U(2.1)):from.clone().addScaledVector(dir,-7).addScaledVector(right,.5).add(U(1.9));
+  // behind the ball; if trees are in the way, step in closer rather than float above them
+  const inTree=v=>G.userData.trees.some(t=>{const dx=v.x-t[0],dz=v.z-t[1];return dx*dx+dz*dz<(t[2]+1.2)*(t[2]+1.2)&&v.y<t[3]+1;});
+  let addr;for(const bk of onGreen?[6.5,5,4,3]:[7,5.5,4.2,3.2]){addr=onGreen?from.clone().addScaledVector(toPin,-bk).addScaledVector(right,.6).add(U(2.1)):from.clone().addScaledVector(dir,-bk).addScaledVector(right,.5).add(U(1.9));if(!inTree(addr))break;}
   const land=c3W(sh.to),endP=land.clone().addScaledVector(dir,full?-42:-16).addScaledVector(right,full?2:1.5).add(U(full?14:6));
   if(!moving&&A.phase!=='wait'){pos=pinW.clone().addScaledVector(dir,-26).add(U(9));look=pinW.clone();}
   else if(!flying){pos=addr;look=onGreen?from.clone().addScaledVector(toPin,8):from.clone().addScaledVector(dir,30).add(U(1));}
@@ -849,11 +856,11 @@ function drawHole3D(dt){const A=ui.anim,cv=document.getElementById('cv');if(!cv|
   else{const q=Math.max(0,Math.min(1,(P.f-.12)/.75)),sm=q*q*(3-2*q);pos=addr.clone().lerp(endP,sm);look=bp.clone();}
   if(A.phase==='wait'&&!holedNow&&sh.k!=='putt'){pos=endP;look=land.clone().lerp(pinW,.2);}
   // never inside a tree: lift the camera over any crown it would sit in
-  for(const t of G.userData.trees){const dx=pos.x-t[0],dz=pos.z-t[1];if(dx*dx+dz*dz<(t[2]+2)*(t[2]+2)&&pos.y<t[3]+3)pos.y=t[3]+3;}
+  if(pos!==addr)for(const t of G.userData.trees){const dx=pos.x-t[0],dz=pos.z-t[1];if(dx*dx+dz*dz<(t[2]+2)*(t[2]+2)&&pos.y<t[3]+3)pos.y=t[3]+3;}
   if(c3.shotKey!==shotKey||!c3.camPos){c3.camPos=pos.clone();c3.camLook=look.clone();c3.shotKey=shotKey;}
-  else{const k=1-Math.exp(-(dt||16)/(flying?160:420));c3.camPos.lerp(pos,k);c3.camLook.lerp(look,k*1.4>1?1:k*1.4);}
+  else{const k=1-Math.exp(-(dt||16)/(flying?260:600));c3.camPos.lerp(pos,k);c3.camLook.lerp(look,Math.min(1,k*1.25));}
   c3.cam.position.copy(c3.camPos);c3.cam.lookAt(c3.camLook);
-  c3.ball.scale.setScalar(Math.max(.0215,c3.cam.position.distanceTo(bp)*.0042));
+  const br=Math.max(.0215,c3.cam.position.distanceTo(bp)*.0042);c3.ball.scale.setScalar(br);if(c3.ball.position.y<br+.01&&!(ballLocal&&!flying&&!landed&&ballLocal.y>.03))c3.ball.position.y=br+.026;
   // the sun follows the action so shadows are crisp where we're looking
   const fc=c3.camLook.clone().setY(0);c3.sun.position.copy(fc).add(new T3.Vector3(60,120,40));c3.sun.target.position.copy(fc);c3.sun.target.updateMatrixWorld();
   c3.rd.render(c3.scene,c3.cam);
