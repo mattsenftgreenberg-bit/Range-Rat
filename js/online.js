@@ -35,7 +35,7 @@ const TORDER_ON=['jr','col0','p3','p2','p1','c2','c1'];
 const SB=window.supabase&&window.RR_CONFIG?window.supabase.createClient(RR_CONFIG.url,RR_CONFIG.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
 const FN=RR_CONFIG.url+'/functions/v1/game';
 const CADL=['No caddy','Beginner caddy','Advanced caddy','Expert caddy'];
-const DEFAULTS={mp_hole_mult:1.4,tm_on:true,tm_fee_jr:1000,tm_fee_col:2000,tm_fee_p3:4000,tm_fee_c2:5000,tm_fee_p2:8000,tm_fee_c1:12000,tm_fee_p1:20000,tm_hole_mult:3.5,tm_size:2,ace_bonus:100000,start_cash:75000,max_golfers:8,sessions_per_day:1,lessons_per_day:5,coach_max:1.5,deadline_min:5,round_min:7.5,events_per_season:8,hours:[18,19,20,21],gain_mult:1,rust_per_day:.025,recovery_per_day:15,event_fatigue:20,train_fatigue:15,purse_mult:1,fee_mult:1,sale_chance_mult:1,coach_age_yr:18,recruit_cost:5000,mp_on:true,mp_fee_jr:250,mp_fee_col:500,mp_fee_p3:1000,mp_fee_c2:1250,mp_fee_p2:2000,mp_fee_c1:3000,mp_fee_p1:5000,mp_base:0,market_size:14,market_new:4,ai_coaches:30,market_prodigy_pct:1,weekends:true,qf_on:true,qf_every_min:20,qf_fee:200,qf_base:20000,qf_add:200,qf_bonus:1000,qf_ace:1000000};
+const DEFAULTS={mp_hole_mult:1.9,tm_on:true,tm_fee_jr:1000,tm_fee_col:2000,tm_fee_p3:4000,tm_fee_c2:5000,tm_fee_p2:8000,tm_fee_c1:12000,tm_fee_p1:20000,tm_hole_mult:4.5,tm_size:2,ace_bonus:100000,start_cash:75000,max_golfers:8,sessions_per_day:1,lessons_per_day:5,coach_max:1.5,deadline_min:5,round_min:7.5,events_per_season:8,hours:[18,19,20,21],gain_mult:1,rust_per_day:.025,recovery_per_day:15,event_fatigue:20,train_fatigue:15,purse_mult:1,fee_mult:1,sale_chance_mult:1,coach_age_yr:18,recruit_cost:5000,mp_on:true,mp_fee_jr:250,mp_fee_col:500,mp_fee_p3:1000,mp_fee_c2:1250,mp_fee_p2:2000,mp_fee_c1:3000,mp_fee_p1:5000,mp_base:0,market_size:14,market_new:4,ai_coaches:30,market_prodigy_pct:1,weekends:true,qf_on:true,qf_every_min:20,qf_fee:200,qf_base:20000,qf_add:200,qf_bonus:1000,qf_ace:1000000};
 const SETN={mp_hole_mult:'Match Play: hole time (times a normal hole)',tm_on:'Team Match Play on',tm_fee_jr:'Team Match Play fee: Junior',tm_fee_col:'Team Match Play fee: College',tm_fee_p3:'Team Match Play fee: Mini Tour',tm_fee_c2:'Team Match Play fee: Senior Qualifying',tm_fee_p2:'Team Match Play fee: Challenger',tm_fee_c1:'Team Match Play fee: Champions',tm_fee_p1:'Team Match Play fee: Premier',tm_hole_mult:'Team Match Play: hole time (times a normal hole)',tm_size:'Team Match Play: golfers per team',ace_bonus:'Hole-in-one bonus in tour events and Match Play (managers\' golfers)',mp_on:'Match Play running (true or false)',mp_fee_jr:'Match Play entry fee: Junior',mp_fee_col:'Match Play entry fee: College',mp_fee_p3:'Match Play entry fee: Mini Tour',mp_fee_c2:'Match Play entry fee: Senior Qualifying',mp_fee_p2:'Match Play entry fee: Challenger',mp_fee_c1:'Match Play entry fee: Champions',mp_fee_p1:'Match Play entry fee: Premier',mp_base:'Match Play guaranteed pot added at college (other levels scale; 0 = entry fees only)',market_prodigy_pct:'Chance a market golfer is a Prodigy (%, at most 5)',market_size:'Golfers for sale from rival coaches',market_new:'New faces on the market each hour',ai_coaches:'Computer coaches available',recruit_cost:'Cost to sign a junior',qf_on:'Quick-Fire Opens running (true or false)',qf_every_min:'Minutes between Quick-Fire Opens',qf_fee:'Quick-Fire entry fee',qf_base:'Quick-Fire base pot',qf_add:'Added to the pot per entry',qf_bonus:'Most greens / up and downs / long drive bonus',qf_ace:'Hole-in-one bonus',start_cash:'Starting money for a new roster',max_golfers:'Most active golfers per roster',sessions_per_day:'Range sessions per golfer per day',lessons_per_day:'Lessons each coach gives per day',coach_max:'Best coach multiplier',deadline_min:'Entry deadline, minutes before the start',round_min:'Minutes per round',weekends:'Tour events on weekends too (true or false)',events_per_season:'(not used: there is now an event every night)',hours:'Start hours (New York time)',gain_mult:'Training gain multiplier',rust_per_day:'Rust per skipped day',recovery_per_day:'Fatigue recovered per day',event_fatigue:'Fatigue from playing an event',train_fatigue:'Fatigue from a range session',purse_mult:'Purse multiplier (new events)',fee_mult:'Entry fee multiplier (new events)',sale_chance_mult:'How keen rival coaches are to buy',coach_age_yr:'Career year a golfer may retire to coach'};
 const ui={view:'loading',sel:null,msg:'',err:'',busy:false,auth:{mode:'in',email:'',msg:'',err:false,busy:false},tour:null,ev:null,watch:null,board:null,feed:null,pros:{name:'',country:'US',college:'',color:0},full:false};
 // the watch view: the hole in 3D (default) or the flat map; remembered per browser
@@ -389,7 +389,8 @@ function holedFor(text,sc,par){if(sc===undefined||sc===null)return text;const d=
 const SCORE_NAMES={'-3':'Albatross','-2':'Eagle','-1':'Birdie','0':'Par','1':'Bogey','2':'Double bogey','3':'Triple bogey'};
 // each shot: a short swing by the golfer, then the ball's flight
 const swingMs=s=>s.k==='full'?1500:s.k==='chip'?1000:s.k==='putt'?850:s.k==='drop'||s.k==='pick'?0:450;
-const flightMs=s=>s.k==='full'?900+dist(s.from,s.to)*2.4:s.k==='chip'?800:s.k==='putt'?750:s.k==='drop'?350:500;
+// real-ish hang times: a drive is in the air ~4-5 s, a wedge ~3 s, a chip ~2 s; putts roll for 1-2.5 s
+const flightMs=s=>{const d=dist(s.from,s.to);return s.k==='full'?2200+d*9:s.k==='chip'?1500+d*12:s.k==='putt'?Math.min(2600,1100+d*55):s.k==='drop'?500:700;};
 const shotDur=s=>swingMs(s)+flightMs(s);
 // how far through the swing (0-1) and the flight (0-1) a shot is, from its overall progress t
 const shotPhase=(s,t)=>{const sw=swingMs(s),tot=sw+flightMs(s),ms=t*tot;return {sw:sw?Math.min(1,ms/sw):1,f:Math.max(0,Math.min(1,(ms-sw)/(tot-sw)))};};
@@ -447,7 +448,9 @@ function camFor(A,green,cv){cv=cv||document.getElementById('cv');const W=cv.widt
 let rafOn=false,lastTs=0;
 function startLoop(){fitCanvas();paintHUD();paintSide();if(!rafOn){rafOn=true;lastTs=performance.now();requestAnimationFrame(frame);}}
 function frame(ts){const A=ui.anim;if(ui.view!=='board'||!ui.watch||!A||!document.getElementById('cv')){rafOn=false;return;}
-  const dt=A.paused?0:Math.min(60,ts-lastTs)*A.speed;lastTs=ts;
+  // live: if the feed has run two or more holes ahead, play a little faster until caught up
+  let ahead=0;if(A.live!==false&&A.cur&&ui.feed){const k=hkey(A.cur.round,A.cur.hole);ahead=ui.feed.filter(x=>hkey(x.round,x.hole)>k).length;}
+  const dt=A.paused?0:Math.min(60,ts-lastTs)*A.speed*(ahead>=4?2:ahead>=2?1.5:1);lastTs=ts;
   if(A.cur&&A.cur.shots.length){
     if(A.phase==='shot'){const sh=A.cur.shots[A.si];A.t+=dt/shotDur(sh);if(A.t>=1){A.t=1;feedA(sh.holed?holedFor(sh.text,(watchScores()[A.cur.round]||[])[A.cur.hole],A.h.par):sh.text);A.trail.push(sh);A.phase='wait';A.w=0;}}
     else if(A.phase==='wait'){A.w+=dt;if(A.w>(A.cur.shots[A.si].holed?1000:750)){A.si++;if(A.si>=A.cur.shots.length){A.si=A.cur.shots.length-1;endHoleA();}else{A.phase='shot';A.t=0;}}}
@@ -845,7 +848,7 @@ function c3Hole(h){if(C3.holes.has(h))return C3.holes.get(h);const T3=C3.T3,G=ne
   crownA.count=na;crownB.count=nb;[crownA,crownB,trunk].forEach(m=>{m.castShadow=true;m.receiveShadow=true;G.add(m);});
   C3.holes.set(h,G);if(C3.holes.size>4){const k=C3.holes.keys().next().value;C3.holes.delete(k);}return G;}
 // the ball's height (metres) at flight fraction f
-const c3Lift=(sh,f)=>sh.k==='putt'||sh.k==='drop'||sh.k==='pick'?0:Math.sin(Math.PI*f)*Math.min(sh.k==='full'?38:14,dist(sh.from,sh.to)*C3K*(sh.k==='full'?.16:.22));
+const c3Lift=(sh,f)=>sh.k==='putt'||sh.k==='drop'||sh.k==='pick'?0:Math.sin(Math.PI*Math.pow(f,1.25))*Math.min(sh.k==='full'?38:14,dist(sh.from,sh.to)*C3K*(sh.k==='full'?.16:.22));
 const c3BallAt=(sh,f)=>c3W(shotAt(sh,f),c3Lift(sh,f));
 function c3Tube(sh,f,mat,r){const T3=C3.T3,L=dist(sh.from,sh.to)*C3K||1,f0=Math.min(f*.5,9/L),n=Math.max(3,Math.round(32*(f-f0))),pts=[];for(let i=0;i<=n;i++)pts.push(c3BallAt(sh,f0+(f-f0)*i/n).add(new T3.Vector3(0,.05,0)));
   return new T3.Mesh(new T3.TubeGeometry(new T3.CatmullRomCurve3(pts),Math.max(4,n*2),r,6,false),mat);}
@@ -854,7 +857,7 @@ function drawHole3D(dt){const A=ui.anim,cv=document.getElementById('cv');if(!cv|
   const T3=c3.T3,W=cv.width,H=cv.height,dpr=Math.min(1.5,window.devicePixelRatio||1),cw=Math.round(cv.clientWidth*dpr),ch=Math.round(cv.clientHeight*dpr);
   if(c3.rd.domElement.width!==cw||c3.rd.domElement.height!==ch){c3.rd.setSize(cw,ch,false);c3.cam.aspect=cw/ch;c3.cam.updateProjectionMatrix();}
   const h=A.h,G=c3Hole(h);if(c3.cur!==G){if(c3.cur)c3.scene.remove(c3.cur);c3.scene.add(G);c3.cur=G;}
-  const shots=A.cur.shots,si=Math.min(A.si,shots.length-1),sh=shots[si],moving=A.phase==='shot',P=moving?shotPhase(sh,A.t):{sw:1,f:1},e=1-Math.pow(1-P.f,2.2);
+  const shots=A.cur.shots,si=Math.min(A.si,shots.length-1),sh=shots[si],moving=A.phase==='shot',P=moving?shotPhase(sh,A.t):{sw:1,f:1},e=1-Math.pow(1-P.f,1.8);
   const wg=(D.golfers.find(g=>g.id===ui.watch)||(ui.board&&(ui.board.players||[]).find(p=>p.id===ui.watch))||{}),gcol=COLORS[wg.color]||'#c2362a';
   const from=c3W(sh.from),to=c3W(sh.to),pinW=c3W(h.pin);let dir=to.clone().sub(from);dir.y=0;if(dir.lengthSq()<.01)dir=pinW.clone().sub(from).setY(0);if(dir.lengthSq()<.01)dir.set(0,0,-1);dir.normalize();
   // the golfer, standing to his ball, swinging
@@ -899,7 +902,7 @@ function drawHole3D(dt){const A=ui.anim,cv=document.getElementById('cv');if(!cv|
   A.panel={sh,P,live:moving,col:gcol,u,who:wg,noSwing:true};return true;}
 function drawMap(dt,cvx){
   const A=ui.anim,cv=cvx||document.getElementById('cv');if(!cv||!A.h)return;const c=cv.getContext('2d'),W=cv.width,H=cv.height,h=A.h,shots=A.cur.shots,sh=shots[Math.min(A.si,shots.length-1)];
-  const moving=A.phase==='shot',P=moving?shotPhase(sh,A.t):{sw:1,f:1},e=1-Math.pow(1-P.f,2.2),ball=moving?shotAt(sh,e):sh.to;
+  const moving=A.phase==='shot',P=moving?shotPhase(sh,A.t):{sw:1,f:1},e=1-Math.pow(1-P.f,1.8),ball=moving?shotAt(sh,e):sh.to;
   const tgt=camFor(A,dist(moving?sh.from:sh.to,h.green)<=52,cv);
   if(!A.cam)A.cam=tgt;else{const k=1-Math.exp(-(dt||16)/260);A.cam={x:A.cam.x+(tgt.x-A.cam.x)*k,y:A.cam.y+(tgt.y-A.cam.y)*k,s:A.cam.s+(tgt.s-A.cam.s)*k};}
   const cam=A.cam,X=x=>(x-cam.x)*cam.s+W/2,Y=y=>H/2-(y-cam.y)*cam.s,Sc=cam.s;

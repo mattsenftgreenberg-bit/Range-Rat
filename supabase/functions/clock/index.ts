@@ -291,7 +291,7 @@ async function lockMatch(ev: any, s: any, done: string[]) {
   const ent = ids.filter((id: string) => gm.has(id)).map((id: string) => ({ gid: id, mid: (gm.get(id) as any).manager_id }));
   let P = 1; while (P < ent.length) P *= 2;
   const course = E.COURSES[ev.ci], wind = { mph: Math.round(4 + Math.random() * 14), dir: Math.random() * Math.PI * 2 };
-  const T = Number(ev.round_min || s.round_min) * 60 / 18 * Number(s.mp_hole_mult || 1.4), rounds: any[] = [];
+  const T = Number(ev.round_min || s.round_min) * 60 / 18 * Number(s.mp_hole_mult || 1.9), rounds: any[] = [];
   let cur: (string | null)[][] = mpPairs(ent, P).map(([a, b]) => [a.gid, b ? b.gid : null]), t0 = 0;
   while (true) {
     const m = cur.map(([a, b]) => b === null ? { a, b, h: [], w: 0, res: 'bye' } : mpMatch(gm.get(a!), gm.get(b), course, wind)).map((x: any, i: number) => ({ a: cur[i][0], b: cur[i][1], ...x }));
@@ -429,7 +429,7 @@ async function lockTeam(ev: any, s: any, done: string[]) {
   if (vsBot) for (const t of [...teams.values()]) teams.set('B' + t.no, { key: 'B' + t.no, mid: null, stable: null, no: t.no, members: [] });
   for (const t of teams.values()) if (t.members.length < size) { const fill = await tourRegulars(lv, size - t.members.length, used); fill.forEach((g) => used.add(g.id)); t.members.push(...fill); }
   const course = E.COURSES[ev.ci], wind = { mph: Math.round(4 + Math.random() * 14), dir: Math.random() * Math.PI * 2 };
-  const T = Number(ev.round_min || s.round_min) * 60 / 18 * Number(s.tm_hole_mult || 3.5), rounds: any[] = [];
+  const T = Number(ev.round_min || s.round_min) * 60 / 18 * Number(s.tm_hole_mult || 4.5), rounds: any[] = [];
   const side = (k: string) => teams.get(k).members;
   const keys = [...teams.keys()];
   let P = 1; while (P < keys.length) P *= 2;
