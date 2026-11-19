@@ -385,7 +385,12 @@ async function loadStand(t){const {data}=await SB.from('standings').select('pts,
 function holedFor(text,sc,par){if(sc===undefined||sc===null)return text;const d=sc-par,t=String(text).replace(/[.!]\s*$/,'');
   return `${t} ${sc===1?'for a hole in one!':d<=-3?'for albatross!':d===-2?'for eagle!':d===-1?'for birdie.':d===0?'for par.':d===1?'for bogey.':d===2?'for double bogey.':d===3?'for triple bogey.':`for a ${sc}.`}`;}
 const SCORE_NAMES={'-3':'Albatross','-2':'Eagle','-1':'Birdie','0':'Par','1':'Bogey','2':'Double bogey','3':'Triple bogey'};
-const shotDur=s=>s.k==='full'?900+dist(s.from,s.to)*2.4:s.k==='chip'?800:s.k==='putt'?750:s.k==='drop'?350:500;
+// each shot: a short swing by the golfer, then the ball's flight
+const swingMs=s=>s.k==='full'?620:s.k==='chip'?480:s.k==='putt'?380:s.k==='drop'||s.k==='pick'?0:450;
+const flightMs=s=>s.k==='full'?900+dist(s.from,s.to)*2.4:s.k==='chip'?800:s.k==='putt'?750:s.k==='drop'?350:500;
+const shotDur=s=>swingMs(s)+flightMs(s);
+// how far through the swing (0-1) and the flight (0-1) a shot is, from its overall progress t
+const shotPhase=(s,t)=>{const sw=swingMs(s),tot=sw+flightMs(s),ms=t*tot;return {sw:sw?Math.min(1,ms/sw):1,f:Math.max(0,Math.min(1,(ms-sw)/(tot-sw)))};};
 const hkey=(r,h)=>r*18+h;
 function watchHTML(b,e){if(!ui.watch)return '';const p=b.players.find(x=>x.id===ui.watch);if(!p)return '';const A=ui.anim||{};
   return `<section class="round" id="watchBox"><div>
@@ -448,26 +453,90 @@ function frame(ts){const A=ui.anim;if(ui.view!=='board'||!ui.watch||!A||!documen
     drawMap(dt);
   }
   requestAnimationFrame(frame);}
+/* ---------- the hole map: shapes, tracers and the golfer ---------- */
+// a repeatable random number per hole and feature, so a hole always looks the same
+const hRand=(h,k)=>{let x=Math.sin((h.len||1)*12.9898+(h.green?h.green[0]*78.233+h.green[1]*3.71:0)+k*37.719)*43758.5453;return x-Math.floor(x);};
+// an organic outline around (cx,cy): radius r, stretched by `el` along angle `rot`, edges wobbling by `amp`
+function blobPath(c,X,Y,Sc,cx,cy,r,h,k,amp,el,rot){const ph=[0,1,2,3].map(i=>hRand(h,k*7+i)*6.28),n=36;c.beginPath();
+  for(let i=0;i<=n;i++){const a=i/n*6.283,w=1+amp*(.55*Math.sin(2*a+ph[0])+.3*Math.sin(3*a+ph[1])+.15*Math.sin(5*a+ph[2])),
+    lx=Math.cos(a)*r*w*Math.sqrt(el||1),ly=Math.sin(a)*r*w/Math.sqrt(el||1),ca=Math.cos(rot||0),sa=Math.sin(rot||0),x=cx+lx*ca-ly*sa,y=cy+lx*sa+ly*ca;
+    i?c.lineTo(X(x),Y(y)):c.moveTo(X(x),Y(y));}c.closePath();}
+// mowing stripes across whatever shape is currently the clip
+function stripes(c,X,Y,Sc,cx,cy,ang,step,span,col){c.fillStyle=col;const ca=Math.cos(ang),sa=Math.sin(ang);
+  for(let d=-span;d<span;d+=step*2){const p=[[d,-span],[d+step,-span],[d+step,span],[d,span]].map(([u,v])=>[cx+u*ca-v*sa,cy+u*sa+v*ca]);
+    c.beginPath();p.forEach((q,i)=>i?c.lineTo(X(q[0]),Y(q[1])):c.moveTo(X(q[0]),Y(q[1])));c.closePath();c.fill();}}
 function drawCourse(c,W,H,h,X,Y,Sc){
   c.fillStyle=MAP.tree;c.fillRect(0,0,W,H);
-  c.fillStyle=MAP.dot;for(const t of h.trees){c.beginPath();c.arc(X(t[0]),Y(t[1]),Math.max(1.5,t[2]*Sc),0,6.3);c.fill();}
   c.lineCap='round';c.lineJoin='round';
   const path=pts=>{c.beginPath();pts.forEach((p,i)=>i?c.lineTo(X(p[0]),Y(p[1])):c.moveTo(X(p[0]),Y(p[1])));};
+  // rough corridor and the area round the green
   c.strokeStyle=MAP.rough;c.lineWidth=2*h.tree*Sc;path(h.pts);c.stroke();
-  c.fillStyle=MAP.rough;c.beginPath();c.arc(X(h.green[0]),Y(h.green[1]),h.tree*Sc,0,6.3);c.fill();
+  blobPath(c,X,Y,Sc,h.green[0],h.green[1],h.tree,h,1,.12,1.15,hRand(h,2)*3);c.fillStyle=MAP.rough;c.fill();
+  // fairway: a ribbon whose width breathes along the hole, with mowing stripes
   const fp=[pointAt(h,h.fs0).p];for(let i=1;i<h.pts.length-1;i++)if(h.cum[i]>h.fs0&&h.cum[i]<h.fs1)fp.push(h.pts[i]);fp.push(pointAt(h,h.fs1).p);
-  c.strokeStyle=MAP.fair;c.lineWidth=2*h.fw*Sc;path(fp);c.stroke();
-  c.fillStyle=MAP.tee;c.fillRect(X(-5),Y(4),10*Sc,8*Sc);
-  c.fillStyle=MAP.water;for(const w of h.water){c.beginPath();c.ellipse(X(w.x),Y(w.y),w.rx*Sc,w.ry*Sc,w.rot,0,6.3);c.fill();}
-  c.fillStyle=MAP.fringe;c.beginPath();c.arc(X(h.green[0]),Y(h.green[1]),(h.gr+3)*Sc,0,6.3);c.fill();
-  c.fillStyle=MAP.green;c.beginPath();c.arc(X(h.green[0]),Y(h.green[1]),h.gr*Sc,0,6.3);c.fill();
-  c.fillStyle=MAP.sand;for(const b of h.sand){c.beginPath();c.arc(X(b.x),Y(b.y),b.r*Sc,0,6.3);c.fill();}
+  const L=[],Rr=[],stepY=6;for(let d=h.fs0;d<=h.fs1+.01;d+=stepY){const q=pointAt(h,Math.min(d,h.fs1)).p,q2=pointAt(h,Math.min(d+2,h.cum[h.cum.length-1])).p,dx=q2[0]-q[0],dy=q2[1]-q[1],l=Math.hypot(dx,dy)||1,nx=-dy/l,ny=dx/l;
+    const ends=Math.min(1,(d-h.fs0)/18,(h.fs1-d)/18),w=h.fw*(1+.16*Math.sin(d/31+hRand(h,3)*6)+.08*Math.sin(d/13+hRand(h,4)*6))*(.55+.45*ends);
+    L.push([q[0]+nx*w,q[1]+ny*w]);Rr.push([q[0]-nx*w,q[1]-ny*w]);}
+  const ring=L.concat(Rr.reverse());c.beginPath();ring.forEach((q,i)=>i?c.lineTo(X(q[0]),Y(q[1])):c.moveTo(X(q[0]),Y(q[1])));c.closePath();c.fillStyle=MAP.fair;c.fill();
+  c.save();c.clip();const mid=pointAt(h,(h.fs0+h.fs1)/2).p,end=pointAt(h,h.fs1).p,st=pointAt(h,h.fs0).p;
+  stripes(c,X,Y,Sc,mid[0],mid[1],Math.atan2(end[1]-st[1],end[0]-st[0]),9,600,'rgba(255,255,255,.07)');c.restore();
+  // tee box
+  c.fillStyle=MAP.tee;c.beginPath();if(c.roundRect)c.roundRect(X(-6),Y(5),12*Sc,10*Sc,3*Sc);else c.rect(X(-6),Y(5),12*Sc,10*Sc);c.fill();
+  c.fillStyle='rgba(255,255,255,.12)';c.fillRect(X(-6),Y(1),12*Sc,2*Sc);
+  // water: an organic pond with a darker edge and a glint
+  h.water.forEach((w,i)=>{blobPath(c,X,Y,Sc,w.x,w.y,w.ry,h,20+i,.14,w.rx/w.ry,w.rot);c.fillStyle=MAP.water;c.fill();c.lineWidth=Math.max(1.5,1.6*Sc);c.strokeStyle='rgba(10,40,70,.45)';c.stroke();
+    c.save();c.clip();c.fillStyle='rgba(255,255,255,.12)';c.beginPath();c.ellipse(X(w.x-w.rx*.25),Y(w.y+w.ry*.3),w.rx*.5*Sc,w.ry*.18*Sc,w.rot,0,6.3);c.fill();c.restore();});
+  // the green: fringe and putting surface, with fine stripes
+  const gRot=hRand(h,5)*3.1,gEl=1+hRand(h,6)*.18;
+  blobPath(c,X,Y,Sc,h.green[0],h.green[1],h.gr+3,h,7,.09,gEl,gRot);c.fillStyle=MAP.fringe;c.fill();
+  blobPath(c,X,Y,Sc,h.green[0],h.green[1],h.gr,h,7,.09,gEl,gRot);c.fillStyle=MAP.green;c.fill();
+  c.save();c.clip();stripes(c,X,Y,Sc,h.green[0],h.green[1],gRot+.6,2.6,h.gr*2,'rgba(255,255,255,.08)');c.restore();
+  // bunkers: kidney shapes with a darker lip and a shaded face
+  h.sand.forEach((bk,i)=>{const rot=hRand(h,30+i)*6.28,el=1.3+hRand(h,40+i)*.5;
+    blobPath(c,X,Y,Sc,bk.x,bk.y,bk.r*1.04,h,50+i,.16,el,rot);c.fillStyle='rgba(60,50,20,.35)';c.lineWidth=Math.max(1.5,1.3*Sc);c.strokeStyle='rgba(120,100,50,.55)';c.fill();
+    blobPath(c,X,Y,Sc,bk.x,bk.y,bk.r*.96,h,50+i,.16,el,rot);c.fillStyle=MAP.sand;c.fill();c.stroke();
+    c.save();c.clip();c.fillStyle='rgba(150,120,60,.18)';c.beginPath();c.ellipse(X(bk.x+bk.r*.35),Y(bk.y-bk.r*.3),bk.r*.9*Sc,bk.r*.55*Sc,rot,0,6.3);c.fill();c.restore();});
+  // trees: a shadow, a dark crown and a lit side
+  for(const t of h.trees){const r=Math.max(1.6,t[2]*Sc),x=X(t[0]),y=Y(t[1]);
+    c.fillStyle='rgba(0,0,0,.22)';c.beginPath();c.arc(x+r*.35,y+r*.35,r,0,6.3);c.fill();
+    c.fillStyle=MAP.dot;c.beginPath();c.arc(x,y,r,0,6.3);c.fill();
+    c.fillStyle='rgba(120,170,90,.22)';c.beginPath();c.arc(x-r*.3,y-r*.3,r*.55,0,6.3);c.fill();}
 }
+// the shape of a shot seen from above: a gentle curve (draw or fade) for full shots, nearly straight for chips, straight putts
+function shotCtl(sh){const dx=sh.to[0]-sh.from[0],dy=sh.to[1]-sh.from[1],l=Math.hypot(dx,dy)||1;
+  let k=Math.sin((sh.from[0]*12.99+sh.to[1]*78.23+l)*.7)*43758.55;k=k-Math.floor(k);
+  const bend=sh.k==='full'?(k-.5)*.22:sh.k==='chip'?(k-.5)*.06:0;
+  return [(sh.from[0]+sh.to[0])/2-dy/l*bend*l,(sh.from[1]+sh.to[1])/2+dx/l*bend*l];}
+const shotAt=(sh,f)=>{const q=shotCtl(sh),a=1-f;return [a*a*sh.from[0]+2*a*f*q[0]+f*f*sh.to[0],a*a*sh.from[1]+2*a*f*q[1]+f*f*sh.to[1]];};
+// how high the ball is (in screen pixels) at flight fraction f
+const shotLift=(sh,f,Sc,H)=>sh.k==='putt'||sh.k==='drop'||sh.k==='pick'?0:Math.sin(Math.PI*f)*Math.min(H*(sh.k==='full'?.13:.05),dist(sh.from,sh.to)*Sc*(sh.k==='full'?.22:.12));
+// a tracer from the start of the shot to flight fraction f: an arc through the air. Bright and glowing while live, faint afterwards
+function drawTracer(c,X,Y,Sc,H,u,sh,f,col,live){if(sh.k==='drop'||sh.k==='pick'||f<=0)return;const n=Math.max(4,Math.round(28*f)),pts=[];
+  for(let i=0;i<=n;i++){const g=f*i/n,p=shotAt(sh,g);pts.push([X(p[0]),Y(p[1])-shotLift(sh,g,Sc,H)]);}
+  c.lineCap='round';c.lineJoin='round';
+  if(live){c.save();c.shadowColor=col;c.shadowBlur=u*.9;}
+  c.beginPath();pts.forEach((q,i)=>i?c.lineTo(q[0],q[1]):c.moveTo(q[0],q[1]));
+  c.strokeStyle=live?'rgba(255,255,255,.9)':'rgba(16,32,26,.35)';c.lineWidth=live?Math.max(2.4,u*.3):Math.max(2,u*.26);c.stroke();
+  c.strokeStyle=col;c.globalAlpha=live?1:.7;c.lineWidth=live?Math.max(1.4,u*.16):Math.max(1.2,u*.14);c.stroke();c.globalAlpha=1;
+  if(live)c.restore();}
+// a little golfer seen from above, in his colours, standing beside the ball and swinging at it.
+// sw: 0 address, up to .62 backswing, .62-.78 the strike, then the follow-through; fade: 1 solid down to 0 gone
+function drawGolfer(c,X,Y,u,sh,sw,col,fade){if(fade<=0||sh.k==='drop'||sh.k==='pick')return;const dx=sh.to[0]-sh.from[0],dy=sh.to[1]-sh.from[1],a=Math.atan2(-dy,dx);
+  const bx=X(sh.from[0]),by=Y(sh.from[1]),s=u*1.9,nx=Math.cos(a),ny=Math.sin(a),px=-ny,py=nx;
+  const gx=bx+px*s*.8,gy=by+py*s*.8;c.save();c.globalAlpha=fade;
+  const amp=sh.k==='putt'?.35:sh.k==='chip'?.9:1.9,sw2=sw<.62?-(sw/.62)*amp:sw<.78?-amp+((sw-.62)/.16)*(amp*1.7):amp*.7+Math.min(1,(sw-.78)/.22)*amp*.25;
+  const ca=Math.atan2(by-gy,bx-gx)+sw2,cl=s*(sh.k==='putt'?1.25:1.55);
+  c.fillStyle='rgba(0,0,0,.25)';c.beginPath();c.ellipse(gx+s*.18,gy+s*.18,s*.62,s*.42,a,0,6.3);c.fill();
+  c.strokeStyle='#1d1d1d';c.lineWidth=Math.max(1.2,s*.12);c.beginPath();c.moveTo(gx,gy);c.lineTo(gx+Math.cos(ca)*cl,gy+Math.sin(ca)*cl);c.stroke();
+  c.fillStyle='#d9d9d9';c.beginPath();c.arc(gx+Math.cos(ca)*cl,gy+Math.sin(ca)*cl,Math.max(1.2,s*.13),0,6.3);c.fill();
+  c.fillStyle=col;c.strokeStyle='rgba(16,32,26,.8)';c.lineWidth=Math.max(1,s*.08);c.beginPath();c.ellipse(gx,gy,s*.36,s*.56,a+Math.PI/2+sw2*.25,0,6.3);c.fill();c.stroke();
+  c.fillStyle='#f1d3b3';c.beginPath();c.arc(gx,gy,s*.25,0,6.3);c.fill();c.fillStyle='#1d1d1d';c.beginPath();c.arc(gx,gy,s*.25,a-Math.PI*.9,a+Math.PI*.9,true);c.fill();
+  c.restore();}
 function drawFlag(c,px,py,u){c.strokeStyle='#10201a';c.lineWidth=Math.max(1.5,u*.14);c.beginPath();c.moveTo(px,py);c.lineTo(px,py-u*2.2);c.stroke();
   c.fillStyle='#e3b420';c.beginPath();c.moveTo(px,py-u*2.2);c.lineTo(px+u*1.3,py-u*1.75);c.lineTo(px,py-u*1.3);c.fill();}
 function drawMap(dt){
   const A=ui.anim,cv=document.getElementById('cv');if(!cv||!A.h)return;const c=cv.getContext('2d'),W=cv.width,H=cv.height,h=A.h,shots=A.cur.shots,sh=shots[Math.min(A.si,shots.length-1)];
-  const moving=A.phase==='shot',e=moving?1-Math.pow(1-A.t,2.2):1,ball=moving?lerp(sh.from,sh.to,e):sh.to;
+  const moving=A.phase==='shot',P=moving?shotPhase(sh,A.t):{sw:1,f:1},e=1-Math.pow(1-P.f,2.2),ball=moving?shotAt(sh,e):sh.to;
   const tgt=camFor(A,dist(moving?sh.from:sh.to,h.green)<=52);
   if(!A.cam)A.cam=tgt;else{const k=1-Math.exp(-(dt||16)/260);A.cam={x:A.cam.x+(tgt.x-A.cam.x)*k,y:A.cam.y+(tgt.y-A.cam.y)*k,s:A.cam.s+(tgt.s-A.cam.s)*k};}
   const cam=A.cam,X=x=>(x-cam.x)*cam.s+W/2,Y=y=>H/2-(y-cam.y)*cam.s,Sc=cam.s;
@@ -479,19 +548,18 @@ function drawMap(dt){
     c.strokeStyle=`rgba(227,180,32,${1-hw})`;c.beginPath();c.arc(px,py,u*(.3+hw*1.8),0,6.3);c.stroke();}
   c.strokeStyle='#10201a';c.lineWidth=Math.max(1.5,u*.14);c.beginPath();c.moveTo(px,py);c.lineTo(px,py-u*2.2);c.stroke();
   c.fillStyle='#e3b420';c.beginPath();c.moveTo(px,py-u*2.2);c.lineTo(px+u*1.3,py-u*1.75);c.lineTo(px,py-u*1.3);c.fill();
-  c.lineWidth=Math.max(1.5,u*.16);c.strokeStyle='rgba(255,255,255,.6)';c.setLineDash([u*.6,u*.5]);
-  for(const s of A.trail){if(s.k==='drop'||s.k==='pick')continue;c.beginPath();c.moveTo(X(s.from[0]),Y(s.from[1]));c.lineTo(X(s.to[0]),Y(s.to[1]));c.stroke();}
-  if(moving&&sh.k!=='drop'){c.beginPath();c.moveTo(X(sh.from[0]),Y(sh.from[1]));c.lineTo(X(ball[0]),Y(ball[1]));c.stroke();}
-  c.setLineDash([]);
+  const wg=(D.golfers.find(g=>g.id===ui.watch)||(ui.board&&(ui.board.players||[]).find(p=>p.id===ui.watch))||{}),gcol=COLORS[wg.color]||'#c2362a';
+  for(const s of A.trail)drawTracer(c,X,Y,Sc,H,u,s,1,gcol,false);
+  if(moving){drawTracer(c,X,Y,Sc,H,u,sh,e,gcol,true);drawGolfer(c,X,Y,u,sh,P.sw,gcol,P.f<.35?1:Math.max(0,1-(P.f-.35)/.3));}
   if(sunk){if(hw<1){c.fillStyle=`rgba(255,255,255,${Math.min(1,2.2*(1-hw))})`;c.font=`700 ${Math.round(u*1.5)}px 'Barlow Condensed','Arial Narrow',sans-serif`;c.textAlign='center';
       c.strokeStyle=`rgba(16,32,26,${Math.min(1,2.2*(1-hw))})`;c.lineWidth=u*.3;const ty=Math.max(u*2,py-u*3.4-hw*u);c.strokeText('IN THE HOLE',px,ty);c.fillText('IN THE HOLE',px,ty);}
     return;}
-  const air=moving&&sh.k!=='putt'&&sh.k!=='drop'?Math.sin(Math.PI*A.t):0,lift=air*Math.min(H*.09,dist(sh.from,sh.to)*Sc*.16);
-  const drop=holed&&A.t>.88?Math.max(0,1-(A.t-.88)/.12):1,br=u*.42*(1+air*.7)*drop;
+  const lift=moving?shotLift(sh,e,Sc,H):0,air=lift?lift/Math.max(1,H*.13):0;
+  const drop=holed&&P.f>.88?Math.max(0,1-(P.f-.88)/.12):1,br=u*.42*(1+air*.9)*drop;
   const bx=X(ball[0]),by=Y(ball[1]);if(br<=.2)return;
   const mineG=D.golfers.find(g=>g.id===ui.watch);
   c.fillStyle='rgba(0,0,0,.3)';c.beginPath();c.ellipse(bx+lift*.3,by+u*.12,br,br*.6,0,0,6.3);c.fill();
-  c.fillStyle='#fff';c.strokeStyle=mineG?COLORS[mineG.color]||'#222':'#222';c.lineWidth=Math.max(1.5,u*.16);c.beginPath();c.arc(bx,by-lift,br,0,6.3);c.fill();c.stroke();
+  c.fillStyle='#fff';c.strokeStyle=gcol;c.lineWidth=Math.max(1.5,u*.16);c.beginPath();c.arc(bx,by-lift,br,0,6.3);c.fill();c.stroke();
 }
 
 /* ---------- the guide: how Range Rat works ---------- */
@@ -798,21 +866,19 @@ function mFrame(ts){const M=ui.ma,cv=document.getElementById('mcv');if(ui.view!=
   else if(M.phase==='post'){M.w+=dt;if(M.w>1700){M.phase='idle';if(M.live)mpSync();}}
   mDraw(dt);requestAnimationFrame(mFrame);}
 function mDraw(dt){const M=ui.ma,cv=document.getElementById('mcv');if(!cv||!M.h)return;const c=cv.getContext('2d'),W=cv.width,H=cv.height,h=M.h;
-  const q=M.seq&&M.seq.length?M.seq[Math.min(M.si,M.seq.length-1)]:null,moving=!!q&&M.phase==='shot',ez=moving?1-Math.pow(1-M.t,2.2):1;
+  const q=M.seq&&M.seq.length?M.seq[Math.min(M.si,M.seq.length-1)]:null,moving=!!q&&M.phase==='shot',P=moving?shotPhase(q.sh,M.t):{sw:1,f:1},ez=1-Math.pow(1-P.f,2.2);
   const focus=q?(moving?q.sh.from:q.sh.to):[0,0],nearG=M.pos?M.pos.every((pp,p)=>M.holed[p]||dist(pp,h.green)<=52)&&dist(focus,h.green)<=52:false;
   const tgt=camFor({h},nearG,cv);if(!M.cam)M.cam=tgt;else{const k=1-Math.exp(-(dt||16)/260);M.cam={x:M.cam.x+(tgt.x-M.cam.x)*k,y:M.cam.y+(tgt.y-M.cam.y)*k,s:M.cam.s+(tgt.s-M.cam.s)*k};}
   const cam=M.cam,X=v=>(v-cam.x)*cam.s+W/2,Y=v=>H/2-(v-cam.y)*cam.s,Sc=cam.s,u=Math.max(W/55,5);
   drawCourse(c,W,H,h,X,Y,Sc);
   const px=X(h.pin[0]),py=Y(h.pin[1]);c.fillStyle='#10201a';c.beginPath();c.arc(px,py,Math.max(2.5,.45*Sc),0,6.3);c.fill();drawFlag(c,px,py,u);
-  // tracers: a dark edge under each golfer's colour so both read on grass, sand and water
-  const seg=(s,to,col)=>{c.beginPath();c.moveTo(X(s.from[0]),Y(s.from[1]));c.lineTo(X(to[0]),Y(to[1]));c.strokeStyle='rgba(16,32,26,.55)';c.lineWidth=Math.max(3,u*.34);c.stroke();c.strokeStyle=col;c.lineWidth=Math.max(2,u*.2);c.stroke();};
-  c.lineCap='round';
-  if(M.trail)M.trail.forEach((tr,p)=>{for(const s of tr)seg(s,s.to,MPC[M.balls[p].side]);});
-  let ball=null;if(moving&&q.sh.k!=='drop'&&q.sh.k!=='pick'){ball=lerp(q.sh.from,q.sh.to,ez);seg(q.sh,ball,MPC[q.side]);}
+  // each golfer's earlier shots as faint arcs in his side's colour; the shot in the air glows, with the golfer swinging at it
+  if(M.trail)M.trail.forEach((tr,p)=>{for(const s of tr)drawTracer(c,X,Y,Sc,H,u,s,1,MPC[M.balls[p].side],false);});
+  let ball=null;if(moving&&q.sh.k!=='drop'&&q.sh.k!=='pick'){ball=shotAt(q.sh,ez);drawTracer(c,X,Y,Sc,H,u,q.sh,ez,MPC[q.side],true);drawGolfer(c,X,Y,u,q.sh,P.sw,MPC[q.side],P.f<.35?1:Math.max(0,1-(P.f-.35)/.3));}
   if(!M.pos)return;
   for(let p=0;p<M.pos.length;p++){if(M.holed[p]&&!(moving&&q.p===p))continue;const at=moving&&q.p===p?(ball||q.sh.from):M.pos[p];
-    const air=moving&&q.p===p&&q.sh.k!=='putt'&&q.sh.k!=='drop'?Math.sin(Math.PI*M.t):0,lift=air*Math.min(H*.09,dist(q.sh.from,q.sh.to)*Sc*.16);
-    const drop=moving&&q.p===p&&q.sh.holed&&M.t>.88?Math.max(0,1-(M.t-.88)/.12):1,br=u*.42*(1+air*.7)*drop;if(br<=.2)continue;
+    const lift=moving&&q.p===p?shotLift(q.sh,ez,Sc,H):0,air=lift?lift/Math.max(1,H*.13):0;
+    const drop=moving&&q.p===p&&q.sh.holed&&P.f>.88?Math.max(0,1-(P.f-.88)/.12):1,br=u*.42*(1+air*.9)*drop;if(br<=.2)continue;
     const bx=X(at[0]),by=Y(at[1]);c.fillStyle='rgba(0,0,0,.3)';c.beginPath();c.ellipse(bx+lift*.3,by+u*.12,br,br*.6,0,0,6.3);c.fill();
     c.fillStyle='#fff';c.strokeStyle=MPC[M.balls[p].side];c.lineWidth=Math.max(2,u*.22);c.beginPath();c.arc(bx,by-lift,br,0,6.3);c.fill();c.stroke();
     // in a team match, each ball carries its golfer's number in the team (1 to 4)
