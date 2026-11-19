@@ -35,6 +35,13 @@ Deno.serve(async (req) => {
   }
 });
 
+// Team Match Play: golfers per team, and putting each team's fee on its first golfer (entry order) so the books stay straight
+const tmSize = (s: any) => Math.max(1, Number(s.tm_size) || 2);
+async function tmRefee(ev: any, uid: string, s: any) {
+  const { data: mine } = await sb.from('entries').select('golfer_id,fee,created_at').eq('event_id', ev.id).eq('manager_id', uid).eq('status', 'in').order('created_at');
+  const unit = ev.test ? 0 : ev.fee, TS = tmSize(s);
+  await Promise.all((mine || []).map((x: any, i: number) => { const f = i % TS === 0 ? unit : 0; return x.fee === f ? null : sb.from('entries').update({ fee: f }).eq('event_id', ev.id).eq('golfer_id', x.golfer_id); }));
+}
 async function myGolfer(uid: string, id: string, active = true) {
   const { data: g } = await sb.from('golfers').select('*').eq('id', id).maybeSingle();
   if (!g || g.manager_id !== uid) no("That golfer isn't in your stable.");
@@ -160,14 +167,15 @@ const A: Record<string, (c: any) => Promise<any>> = {
     const { data: ex } = await sb.from('entries').select('*').eq('event_id', ev.id).eq('golfer_id', g.id).maybeSingle();
     if (ex?.status === 'in') return {};
     let fee = ev.test ? 0 : ev.fee;
-    // Team Match Play: up to tm_size golfers (two) make one team, and the team fee is paid once, with the first of them
-    if (String(ev.tour).startsWith('tm:')) {
+    // Team Match Play: a manager's golfers make teams of tm_size in the order they were entered, and each new team pays the fee once
+    const tm = String(ev.tour).startsWith('tm:');
+    if (tm) {
       const { count } = await sb.from('entries').select('golfer_id', { count: 'exact', head: true }).eq('event_id', ev.id).eq('manager_id', uid).eq('status', 'in');
-      if ((count || 0) >= (Number(s.tm_size) || 2)) no('Your team is already full.');
-      if (count) fee = 0;
+      if ((count || 0) % tmSize(s)) fee = 0;
     }
-    if (fee) await cash(uid, -fee, 'entry', `Entry: ${ev.name}`, false);
-    await sb.from('entries').upsert({ event_id: ev.id, golfer_id: g.id, manager_id: uid, status: 'in', fee });
+    if (fee) await cash(uid, -fee, 'entry', `Entry: ${ev.name}${tm ? ' (new team)' : ''}`, false);
+    await sb.from('entries').upsert({ event_id: ev.id, golfer_id: g.id, manager_id: uid, status: 'in', fee, created_at: new Date().toISOString() });
+    if (tm) await tmRefee(ev, uid, s);
   },
   // Enter every golfer who can play this event and isn't in yet. Stops if the money runs out.
   async enterAll({ uid, b, s }) {
@@ -178,15 +186,17 @@ const A: Record<string, (c: any) => Promise<any>> = {
     const { data: ex } = await sb.from('entries').select('golfer_id,status').eq('event_id', ev.id).eq('manager_id', uid);
     const inn = new Set((ex || []).filter((x: any) => x.status === 'in').map((x: any) => x.golfer_id));
     let todo = (gs || []).filter((g: any) => (q ? ev.tour.slice(3) === (E.isCol(g.tour) ? 'col' : g.tour) : ev.tour === g.tour) && !inn.has(g.id));
-    // a team: the best of them, up to tm_size in all, for one team fee
-    if (team) todo = todo.sort((a: any, b: any) => E.ovr(b.sk) - E.ovr(a.sk)).slice(0, Math.max(0, (Number(s.tm_size) || 2) - inn.size));
-    if (!todo.length) no(team ? 'Your team is already full.' : 'All your golfers who can play are already in.');
+    // a team: the best of those not yet in, enough to finish the team being made or make a new one (one fee per team)
+    const TS = tmSize(s);
+    if (team) todo = todo.sort((a: any, b: any) => E.ovr(b.sk) - E.ovr(a.sk)).slice(0, TS - (inn.size % TS));
+    if (!todo.length) no(team ? 'No more of your golfers can play at this level.' : 'All your golfers who can play are already in.');
     let fee = ev.test ? 0 : ev.fee, n = 0, short = 0, paid = 0;
     for (const g of todo) {
-      const f = team && (inn.size || n) ? 0 : fee;
-      if (f) { try { await cash(uid, -f, 'entry', `Entry: ${ev.name} (${team ? 'team' : g.name})`, false); paid += f; } catch { short++; if (team) break; continue; } }
-      await sb.from('entries').upsert({ event_id: ev.id, golfer_id: g.id, manager_id: uid, status: 'in', fee: f }); n++;
+      const f = team && (inn.size + n) % TS ? 0 : fee;
+      if (f) { try { await cash(uid, -f, 'entry', `Entry: ${ev.name} (${team ? 'new team' : g.name})`, false); paid += f; } catch { short++; if (team) break; continue; } }
+      await sb.from('entries').upsert({ event_id: ev.id, golfer_id: g.id, manager_id: uid, status: 'in', fee: f, created_at: new Date(Date.now() + n).toISOString() }); n++;
     }
+    if (team) await tmRefee(ev, uid, s);
     if (team && short && !n) no(`Not enough money for the ${fmt$(fee)} team fee.`);
     return { msg: `${n} golfer${n === 1 ? '' : 's'} entered${paid ? ` for ${fmt$(paid)}` : ''}.${short && !team ? ` ${short} left out: not enough money.` : ''}` };
   },
@@ -228,12 +238,18 @@ const A: Record<string, (c: any) => Promise<any>> = {
     const { data: ev } = await sb.from('events').select('*').eq('id', b.event).maybeSingle();
     if (!ev || ev.status !== 'open' || Date.parse(ev.starts_at) - s.deadline_min * 60e3 <= Date.now()) no('Too late to withdraw.');
     const { data: ex } = await sb.from('entries').select('*').eq('event_id', ev.id).eq('golfer_id', g.id).maybeSingle();
-    if (ex?.status === 'in' && ex.fee) {
-      // in Team Match Play the team fee stays paid while any of the team is still in
-      const { data: mates } = String(ev.tour).startsWith('tm:') ? await sb.from('entries').select('golfer_id').eq('event_id', ev.id).eq('manager_id', uid).eq('status', 'in').neq('golfer_id', g.id).limit(1) : { data: [] as any[] };
-      if (mates?.length) await sb.from('entries').update({ fee: ex.fee }).eq('event_id', ev.id).eq('golfer_id', mates[0].golfer_id);
-      else await cash(uid, ex.fee, 'refund', `Withdrew from ${ev.name}`);
+    if (String(ev.tour).startsWith('tm:')) {
+      // Team Match Play: refund a team fee only if taking him out leaves one team fewer; the rest re-pair in entry order
+      if (ex?.status !== 'in') return {};
+      const { data: mine } = await sb.from('entries').select('golfer_id,fee').eq('event_id', ev.id).eq('manager_id', uid).eq('status', 'in');
+      const n = (mine || []).length, paidAll = (mine || []).reduce((a: number, x: any) => a + (x.fee || 0), 0), unit = ev.test ? 0 : ev.fee;
+      const back = paidAll - Math.ceil((n - 1) / tmSize(s)) * unit;
+      await sb.from('entries').upsert({ event_id: ev.id, golfer_id: g.id, manager_id: uid, status: 'out', fee: 0 });
+      if (back > 0) await cash(uid, back, 'refund', `Withdrew a team from ${ev.name}`);
+      await tmRefee(ev, uid, s);
+      return {};
     }
+    if (ex?.status === 'in' && ex.fee) await cash(uid, ex.fee, 'refund', `Withdrew from ${ev.name}`);
     await sb.from('entries').upsert({ event_id: ev.id, golfer_id: g.id, manager_id: uid, status: 'out', fee: 0 });
   },
   async rule({ uid, b }) {
