@@ -260,12 +260,13 @@ const A: Record<string, (c: any) => Promise<any>> = {
 
   // ---- the transfer market ----
   async list({ uid, b }) {
-    const g = await myGolfer(uid, b.id);
-    if (!canSell(g)) no('Junior Tour golfers can’t be sold until they reach college.');
+    const g = await myGolfer(uid, b.id, false);
+    if (g.retired && !g.cr) no("He's retired and isn't coaching.");
+    if (!g.retired && !canSell(g)) no('Junior Tour golfers can’t be sold until they reach college.');
     const ask = Math.round(+b.ask); if (!(ask >= 1000 && ask <= 1e9)) no('Set a price of at least $1,000.');
     await sb.from('golfers').update({ ask, listed_at: new Date().toISOString() }).eq('id', g.id);
   },
-  async unlist({ uid, b }) { const g = await myGolfer(uid, b.id); await sb.from('golfers').update({ ask: null, listed_at: null }).eq('id', g.id); },
+  async unlist({ uid, b }) { const g = await myGolfer(uid, b.id, false); await sb.from('golfers').update({ ask: null, listed_at: null }).eq('id', g.id); },
   async quicksell({ uid, b }) {
     const g = await myGolfer(uid, b.id);
     if (!canSell(g)) no('Junior Tour golfers can’t be sold until they reach college.');
@@ -276,10 +277,19 @@ const A: Record<string, (c: any) => Promise<any>> = {
     return { msg: `${rival} takes ${g.name} for ${fmt$(price)}.` };
   },
   async buy({ uid, b, s }) {
-    if ((await activeCount(uid)) >= s.max_golfers) no(`Your roster is full at ${s.max_golfers} active golfers.`);
-    const { data: g } = await sb.from('golfers').select('id,name,manager_id,ask').eq('id', b.id).maybeSingle();
+    const { data: g } = await sb.from('golfers').select('id,name,manager_id,ask,retired,cr').eq('id', b.id).maybeSingle();
     if (!g?.ask) no("He's no longer for sale.");
     if (g.manager_id === uid) no("He's already yours.");
+    // a coach: he doesn't take a place on the roster
+    if (g.retired) {
+      const { data: ok, error } = await sb.rpc('transfer_coach', { gid: g.id, buyer: uid, price: g.ask });
+      if (error) no(error.message.includes('insufficient_funds') ? 'Not enough money in the bank for that.' : 'That sale fell through.');
+      if (!ok) no('The price changed or he was sold. Have another look.');
+      if (g.manager_id) { const { data: m } = await sb.from('managers').select('name').eq('id', uid).single(); await addNews(g.manager_id, [`${m?.name || 'Another manager'} hired your coach ${g.name} for ${fmt$(g.ask)}.`]); }
+      await addNews(uid, [`${g.name} now coaches for you: free lessons for your golfers, and fees from other rosters.`]);
+      return { msg: `${g.name} coaches for you now.` };
+    }
+    if ((await activeCount(uid)) >= s.max_golfers) no(`Your roster is full at ${s.max_golfers} active golfers.`);
     const { data: ok, error } = await sb.rpc('transfer_golfer', { gid: g.id, buyer: uid, price: g.ask });
     if (error) no(error.message.includes('insufficient_funds') ? 'Not enough money in the bank for that.' : 'That sale fell through.');
     if (!ok) no('The price changed or he was sold. Have another look.');

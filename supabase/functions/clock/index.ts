@@ -4,7 +4,7 @@
 // run the daily refresh at midnight New York time, and close the season at the end of each month.
 import {
   sb, E, settings, clockSecretOk, json, CORS, etParts, etDate, etInstant, TORDER, RIVALS, rawCo, coLift, coachRatings,
-  fairPrice, fameOf, pBook, golferRow, insertGolfers, marketProspect, valueOf, canSell, saleChanceDay, cash, addNews,
+  fairPrice, coachValue, fameOf, pBook, golferRow, insertGolfers, marketProspect, valueOf, canSell, saleChanceDay, cash, addNews,
   addSkill, trainOnce, fmt$, lesson, ageOf, classOf, seasonal, collegeOffers, Y,
 } from '../_shared/common.ts';
 
@@ -811,6 +811,17 @@ async function hourly(s: any, done: string[]) {
       sx.push({ ce: m.p.ce, peak: m.p.peak, agg: m.p.agg });
     }
     await insertGolfers(rows, sx); added = want;
+  }
+  // a few computer coaches on the transfer market too: one rotates out each hour, priced from what he's worth
+  {
+    const { data: cl } = await sb.from('golfers').select('id,listed_at').eq('retired', true).not('cr', 'is', null).is('manager_id', null).not('ask', 'is', null).order('listed_at');
+    const cur = cl || [], out = cur.length >= s.market_coaches ? cur.slice(0, cur.length - s.market_coaches + 1) : [];
+    if (out.length) await sb.from('golfers').update({ ask: null, listed_at: null }).in('id', out.map((c: any) => c.id));
+    const need = s.market_coaches - (cur.length - out.length);
+    if (need > 0) {
+      const { data: pool } = await sb.from('golfers').select('id,cr').eq('retired', true).not('cr', 'is', null).is('manager_id', null).is('ask', null).limit(200);
+      for (const c of shuffle((pool || []) as any[]).slice(0, need)) if (c.cr?.o) await sb.from('golfers').update({ ask: Math.round(coachValue(c.cr.o) * (0.85 + Math.random() * 0.45) / 500) * 500, listed_at: new Date().toISOString() }).eq('id', c.id);
+    }
   }
   // computer coaches: keep the staff at full strength
   const { count: nc } = await sb.from('golfers').select('id', { count: 'exact', head: true }).eq('retired', true).not('cr', 'is', null).is('manager_id', null);
