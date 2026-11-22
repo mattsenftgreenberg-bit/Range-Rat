@@ -69,7 +69,7 @@ function umbO(g,u,ro){const v=um(g.sk,u);let rows;
   if(u==='s'){const pv=(g.sk.sputt+g.sk.lputt)/2;rows=['wedge','pitch','chip','bunker'].map(k=>subRowO(g,k,ro)).join('')+`<div class="sn grp">Putting</div><div class="track"><i style="width:${pv}%;background:${barC(pv)}"></i></div><div class="sv">${Math.round(pv)}</div>${ro?'':'<span></span>'}`+subRowO(g,'sputt',ro,1)+subRowO(g,'lputt',ro,1);}
   else rows=SUB[u].map(k=>subRowO(g,k,ro)).join('');
   const c=!ro&&g.coach_id&&D.coaches.find(x=>x.id===g.coach_id),m=c&&c.cr.o?coMultC(c.cr.o[u]):0;
-  return `<div class="umb"><div class="uhead"><div><h2>${UMB[u]}</h2><small>${UMBD[u]}${m?` <span class="tag">×${m.toFixed(2)} with ${esc(c.name)}</span>`:''}</small></div><b>${Math.round(v)}</b></div><div class="track thick"><i style="width:${v}%;background:${barC(v)}"></i></div><div class="subs${ro?' ro':''}">${rows}</div>${ro?'':`<button class="btn sm" data-act="train" data-v="${u}" ${g.sessions>0?'':'disabled'} style="align-self:flex-start">General ${UMB[u].toLowerCase()} session</button>`}</div>`;}
+  return `<div class="umb"><div class="uhead"><div><h2>${UMB[u]}</h2><small>${UMBD[u]}${m?(c.cr.left>0?` <span class="tag">×${m.toFixed(2)} with ${esc(c.name)}</span>`:` <span class="tag hot">Solo today: ${esc(c.name)} booked up</span>`):''}</small></div><b>${Math.round(v)}</b></div><div class="track thick"><i style="width:${v}%;background:${barC(v)}"></i></div><div class="subs${ro?' ro':''}">${rows}</div>${ro?'':`<button class="btn sm" data-act="train" data-v="${u}" ${g.sessions>0?'':'disabled'} style="align-self:flex-start">General ${UMB[u].toLowerCase()} session</button>`}</div>`;}
 const coMultC=v=>1+(S().coach_max-1)*Math.pow(clamp((v-35)/60,0,1),1.2);
 const coOvrC=o=>(o.s+o.m+o.l+o.x)/4;
 // what a coach is worth to buy (mirrors coachValue on the server): about 45 lessons at a fair fee for his ratings
@@ -198,6 +198,7 @@ range(){
 <section class="sec">
  <h2>Today on the range</h2>
  <div class="row"><span class="meters"><span class="meter"><span class="lab">Stamina</span>${pips(st,5)}<b>${st}/5</b></span><span class="meter"><span class="lab">Range session</span>${pips(Math.max(0,g.sessions),S().sessions_per_day)}<b>${Math.max(0,g.sessions)}/${S().sessions_per_day}</b></span></span></div>
+ ${(()=>{const c=g.coach_id&&D.coaches.find(x=>x.id===g.coach_id);return g.sessions>0?(c?(c.cr.left>0?`<p class="cline ok">Coached by <b>${esc(c.name)}</b>: ${c.cr.left} lesson${c.cr.left>1?'s':''} left today.</p>`:`<p class="cline out"><b>${esc(c.name)} is out of lessons today.</b> Training now means working alone. <button class="linkbtn" data-act="cpjump">Pick another coach</button></p>`):`<p class="cline">Working alone today. <button class="linkbtn" data-act="cpjump">Pick a coach</button></p>`):'';})()}
  <p class="hand trainlog">${esc(ui.msg||(g.sessions>0?'One session a day. A drill pushes one skill hard; a general session lifts a whole area a little. Gains shrink as he nears his ceiling.':'He has had his session today. A new one comes at midnight New York time. If you leave it unused, his standing orders spend it.'))}</p>
  ${flash()}
  <div class="row" style="justify-content:flex-start"><button class="btn sm" data-act="train" data-v="rest" ${g.sessions>0&&!ui.busy?'':'disabled'}>Give him a day off</button><span class="muted small">Areas he doesn't work on get slightly rusty each day.</span></div>
@@ -1056,16 +1057,34 @@ ${offersBanner()}${recapHTML(false)}${raceHTML()}<section class="sec"><h2>Latest
 <section class="sec"><h2>Roster name</h2><div class="row" style="justify-content:flex-start"><input id="stName" type="text" maxlength="30" value="${esc(D.me.name)}"><button class="btn sm" data-act="rename">Rename</button></div>${flash()}</section>`;}
 function offersHTML(g){const L=g.offers&&g.offers.list;if(!L||!L.length)return '';const left=Math.max(0,Date.parse(g.offers.at)+2*864e5-Date.now());
   return `<section class="sec offers"><h2>College offers</h2><p>${esc(g.name)} turned 18 and the colleges want him. Each offer comes with an NIL payment to you. Pick one${left?` within ${until(new Date(Date.now()+left).toISOString())}`:''}, or he takes the best.</p><div class="shop">${L.map((o,i)=>`<div class="item"><b>${esc(o.college)}</b><span>NIL deal</span><span class="tag hot">${fmt$(o.nil)}</span><button class="btn sm${i===0?' primary':''}" data-act="commit" data-v="${i}" ${ui.busy?'disabled':''}>Commit to ${esc(o.college)}</button></div>`).join('')}</div>${flash()}</section>`;}
-// The coach board on the range: pick who coaches this golfer's sessions, or work alone.
-function coachBoard(g){const cur=g.coach_id&&D.coaches.find(x=>x.id===g.coach_id),L=S().lessons_per_day;
-  const list=D.coaches.slice().sort((a,b)=>(b.cr.o?coOvrC(b.cr.o):0)-(a.cr.o?coOvrC(a.cr.o):0));
-  const bars=o=>`<div class="cbars">${[['s','Short'],['m','Irons'],['l','Long'],['x','Head']].map(([u,l])=>`<span>${l}</span><span class="track"><i style="width:${o[u]||0}%;background:${barC(o[u]||0)}"></i></span><b>${o[u]??'\u2013'}</b>`).join('')}</div>`;
-  const fee=c=>c.manager_id===D.user.id?'Free (yours)':fmt$(c.cr.price)+' a lesson';
-  const card=c=>{const on=c.id===g.coach_id,full=c.cr.left<=0&&!on,o=c.cr.o||{};return `<div class="ccard${on?' on':''}${full?' full':''}"><div class="chead"><b>${flagHTML(c.country)}${esc(c.name)}</b><span class="muted small">${esc(c.stable||'')}</span></div>${bars(o)}<div class="cfoot"><span>${fee(c)}</span><span class="muted small">${c.cr.left} of ${L} left today</span>${on?'<span class="tag hot">His coach</span>':`<button class="btn sm" data-act="coachpick" data-v="${c.id}" ${full||ui.busy?'disabled':''}>${full?'Booked up':'Use him'}</button>`}</div></div>`;};
-  return `<section class="sec"><h2>Coach</h2>
- ${cur?`<p>${esc(g.name)} works with <b>${esc(cur.name)}</b> (${fee(cur)}). In his best area a coach multiplies a session by up to \u00d7${S().coach_max}. If he's booked up for the day, your golfer works alone.</p>`:`<p>${esc(g.name)} is working alone. That's free; a coach makes each session count for more.</p>`}
- <details class="cpick"${cur?'':' open'}><summary>${cur?'Change coach':'Choose a coach'} (${list.filter(c=>c.cr.left>0).length} available today)</summary>
- <div class="cgrid"><div class="ccard${cur?'':' on'}"><div class="chead"><b>Work alone</b></div><p class="muted small">No lessons, no fee.</p><div class="cfoot"><span>Free</span>${cur?'<button class="btn sm" data-act="coachpick" data-v="">Work alone</button>':'<span class="tag hot">Current</span>'}</div></div>${list.map(card).join('')}</div></details></section>`;}
+// The coach desk on the range: who coaches this golfer today, whether he has lessons left, and a quick, sortable list to switch.
+const CAREA=[['s','Short'],['m','Irons'],['l','Long'],['x','Head']];
+const coFee=c=>c.manager_id===D.user.id?0:c.cr.price;
+const coFeeTxt=c=>c.manager_id===D.user.id?'Free (yours)':fmt$(c.cr.price);
+const lpips=(n,L)=>`<span class="lpips" aria-label="${n} of ${L} lessons left">${Array.from({length:L},(_,i)=>`<i class="${i<n?'on':''}"></i>`).join('')}</span>`;
+// coaches worth suggesting: available today, best at what this golfer needs most (his weakest area), then cheaper
+function coSuggest(g,n){const w='smlx'.split('').sort((a,b)=>um(g.sk,a)-um(g.sk,b))[0];
+  return D.coaches.filter(c=>c.cr.left>0&&c.id!==g.coach_id&&c.cr.o).sort((a,b)=>(b.cr.o[w]+coOvrC(b.cr.o)*.5)-(a.cr.o[w]+coOvrC(a.cr.o)*.5)||coFee(a)-coFee(b)).slice(0,n).map(c=>({c,w}));}
+function coachBoard(g){const cur=g.coach_id&&D.coaches.find(x=>x.id===g.coach_id),L=S().lessons_per_day,out=cur&&cur.cr.left<=0;
+  const mults=c=>c.cr.o?CAREA.map(([u,l])=>`<span class="cm"><small>${l}</small><b>×${coMultC(c.cr.o[u]).toFixed(2)}</b></span>`).join(''):'';
+  const sugg=coSuggest(g,3),sugHTML=sugg.length?`<div class="csug">${sugg.map(({c,w})=>`<button class="csb" data-act="coachpick" data-v="${c.id}" ${ui.busy?'disabled':''}><b>${flagHTML(c.country)}${esc(c.name)}</b><span>${UMB[w]} ${c.cr.o[w]} · ${coFeeTxt(c)} · ${c.cr.left} left</span><em>Use him</em></button>`).join('')}</div>`:'<p class="muted small">Every coach is booked up today. Lessons reset at midnight New York time.</p>';
+  let top;
+  if(!cur)top=`<div class="cdesk solo"><div class="cd-h"><span class="tag">No coach</span><b>${esc(g.name)} is working alone</b></div><p class="small">Free, but a coach multiplies every session (up to ×${S().coach_max} in his best area). Best available for him today:</p>${sugHTML}</div>`;
+  else if(out)top=`<div class="cdesk out" role="alert"><div class="cd-h"><span class="tag hot">Out of lessons</span><b>${flagHTML(cur.country)}${esc(cur.name)} has no lessons left today</b></div><p class="small">If you train now, ${esc(g.name)} works <b>alone</b>. ${esc(cur.name)} is back at midnight New York time. Switch for today, or wait:</p>${sugHTML}</div>`;
+  else top=`<div class="cdesk ok"><div class="cd-h"><span class="tag good">Coach</span><b>${flagHTML(cur.country)}${esc(cur.name)}</b><span class="cd-l">${lpips(cur.cr.left,L)} <b>${cur.cr.left}</b> of ${L} lessons left today</span></div><div class="cms">${mults(cur)}</div><p class="muted small">${coFeeTxt(cur)}${coFee(cur)?' a lesson':''}. Each session today uses one of his lessons.</p></div>`;
+  // the full list, only when asked for; its open state and scroll survive the page refreshing itself
+  const f=ui.cpf||'avail',srt=ui.cps||'best';
+  const all=D.coaches.filter(c=>c.cr.o),cnt={avail:all.filter(c=>c.cr.left>0).length,all:all.length,mine:all.filter(c=>c.manager_id===D.user.id).length};
+  const key=c=>srt==='fee'?-coFee(c):srt==='best'?coOvrC(c.cr.o):c.cr.o[srt];
+  const list=all.filter(c=>f==='all'||(f==='mine'?c.manager_id===D.user.id:c.cr.left>0||c.id===g.coach_id)).sort((a,b)=>(b.cr.left>0)-(a.cr.left>0)||key(b)-key(a));
+  const row=c=>{const on=c.id===g.coach_id,o=c.cr.o,none=c.cr.left<=0;return `<div class="cprow${on?' on':''}${none?' none':''}"><div class="cpn"><b>${flagHTML(c.country)}${esc(c.name)}</b><span class="small muted">${c.manager_id===D.user.id?'Your coach':esc(c.stable||'Computer coach')}</span></div>
+    <div class="cpnums">${CAREA.map(([u,l])=>`<span class="${srt===u?'hi':''}"><small>${l}</small><b style="color:${barC(o[u])}">${o[u]}</b></span>`).join('')}</div>
+    <div class="cpfee"><b>${coFeeTxt(c)}</b><span class="small muted">${none?'<span class="outtx">No lessons left</span>':`${lpips(c.cr.left,L)} ${c.cr.left} left`}</span></div>
+    <div class="cpbtn">${on?`<span class="tag ${none?'hot':'good'}">${none?'Yours · out':'His coach'}</span>`:`<button class="btn sm${none?'':' primary'}" data-act="coachpick" data-v="${c.id}" ${none||ui.busy?'disabled':''}>${none?'Booked up':'Use him'}</button>`}</div></div>`;};
+  return `<section class="sec coachsec"><div class="race-h"><h2>Coach</h2><div class="row" style="gap:6px">${cur?`<button class="btn sm" data-act="coachpick" data-v="" ${ui.busy?'disabled':''}>Work alone</button>`:''}<button class="btn sm${ui.cpick?' on':''}" data-act="cpick" aria-expanded="${ui.cpick?'true':'false'}">${ui.cpick?'Hide coaches':`All coaches (${cnt.avail} free today)`}</button></div></div>${top}
+  ${ui.cpick?`<div class="cpbar"><div class="row" style="gap:6px;flex-wrap:wrap">${[['avail','Available now'],['all','All'],['mine','Yours']].map(([k,l])=>`<button class="btn sm${f===k?' on':''}" data-act="cpf" data-v="${k}">${l} (${cnt[k]})</button>`).join('')}</div>
+   <label class="field cpsort" for="cpSort"><span>Sort by</span><select id="cpSort" data-change="cps"><option value="best"${srt==='best'?' selected':''}>Best overall</option>${CAREA.map(([u,l])=>`<option value="${u}"${srt===u?' selected':''}>Best ${l.toLowerCase()==='head'?'mental (head)':l.toLowerCase()}</option>`).join('')}<option value="fee"${srt==='fee'?' selected':''}>Cheapest</option></select></label></div>
+   <div class="cplist" id="cplist">${list.length?list.map(row).join(''):'<p class="muted small" style="padding:8px">No coaches here.</p>'}</div>`:''}</section>`;}
 /* ---------- Match Play: the bracket ---------- */
 // Quick-Fire and Match Play side by side: one row per level, with the next event to enter and the one playing now
 function quickBoard(t){const showQ=t==='all'||t===QF,showM=t==='all'||t===MP,showT=t==='all'||t===TM;if(!showQ&&!showM&&!showT)return '';
@@ -1357,7 +1376,7 @@ ${seasons.length?`<h3>Seasons</h3><div class="scroll"><table class="tbl"><thead>
 <section class="umbs">${'smlx'.split('').map(u=>umbO(g,u,true)).join('')}</section>`;}
 
 /* ---------- render and events ---------- */
-function keepScroll(fn){const bs=document.getElementById('bscroll'),top=bs?bs.scrollTop:0,y=window.scrollY;fn();const b2=document.getElementById('bscroll');if(b2&&top)b2.scrollTop=top;if(Math.abs(window.scrollY-y)>2)window.scrollTo(0,y);}
+function keepScroll(fn){const bs=document.getElementById('bscroll'),top=bs?bs.scrollTop:0,y=window.scrollY,cl=document.getElementById('cplist'),ctop=cl?cl.scrollTop:0;fn();const b2=document.getElementById('bscroll');if(b2&&top)b2.scrollTop=top;const c2=document.getElementById('cplist');if(c2&&ctop)c2.scrollTop=ctop;if(Math.abs(window.scrollY-y)>2)window.scrollTo(0,y);}
 function route(){const v=ui.view;if(['loading','auth','join'].includes(v))return '';
   return '#'+(v==='board'&&ui.ev?'board/'+ui.ev+(ui.watch?'/'+ui.watch:''):(v==='golfer'||v==='range')&&ui.sel?v+'/'+ui.sel:v==='mgr'&&ui.mid?'mgr/'+ui.mid:v==='player'&&ui.pid?'player/'+ui.pid:(v==='standings'||v==='events')&&ui.tour?v+'/'+ui.tour:v);}
 function applyRoute(){const h=decodeURIComponent(location.hash.slice(1));if(!h||h.includes('=')||!D.me)return false;const [v,a,b]=h.split('/');
@@ -1382,7 +1401,10 @@ document.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');i
   if(a==='signOut')return signOut();
   if(a==='mgr'){ui.mid=v;ui.view='mgr';ui.mgr=(ui.league||[]).find(m=>m.id===v)||null;render();window.scrollTo(0,0);loadMgr(v);return;}
   if(a==='golfer'){ui.sel=v;ui.view='golfer';ui.msg='';ui.err='';ui.confirm=null;render();window.scrollTo(0,0);return;}
-  if(a==='coachpick'){const gg=G();return act('coach',{id:gg.id,coach:v||null},()=>{ui.msg=v?'Coach booked for his sessions.':'He will work alone.';});}
+  if(a==='cpjump'){ui.cpick=true;render();const s=document.querySelector('.coachsec');if(s)s.scrollIntoView({behavior:'smooth',block:'start'});return;}
+  if(a==='cpick'){ui.cpick=!ui.cpick;return render();}
+  if(a==='cpf'){ui.cpf=v;const l=document.getElementById('cplist');if(l)l.scrollTop=0;return render();}
+  if(a==='coachpick'){const gg=G(),c=v&&D.coaches.find(x=>x.id===v);return act('coach',{id:gg.id,coach:v||null},()=>{ui.cpick=false;ui.msg=v?`${c?c.name:'The coach'} will coach ${gg.name}${c&&c.cr.left>0?`: ${c.cr.left} lesson${c.cr.left>1?'s':''} left today`:''}.`:`${gg.name} will work alone.`;});}
   if(a==='sel'){ui.sel=v;ui.msg='';ui.err='';ui.confirm=null;return render();}
   if(a==='confirm'){ui.confirm=v||null;return render();}
   if(a==='pcolor'){ui.pros.color=+v;return render();}
@@ -1434,6 +1456,7 @@ document.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');i
 document.addEventListener('change',ev=>{const n=ev.target,c=n.dataset&&n.dataset.change;
   if(n.id==='gname'||n.id==='gcountry'||n.id==='gcollege')keepPros();
   if(!c)return;const g=G();
+  if(c==='cps'){ui.cps=n.value;n.blur();const l=document.getElementById('cplist');render();const l2=document.getElementById('cplist');if(l2)l2.scrollTop=0;return;}
   if(c==='rule')act('rule',{id:g.id,rule:n.value});
   if(c==='college')act('college',{id:g.id,college:n.value});
 });
