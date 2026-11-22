@@ -1,6 +1,8 @@
 // Shared by the `game` (player actions) and `clock` (the world's timekeeper) server functions.
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import * as E0 from './engine.js';
+import { uniqueName } from './names.ts';
+export { uniqueName };
 export const E: any = E0;
 // The online world: a Junior Tour (ages 15 to 17) and one Collegiate Tour for every college player.
 E.TOURS.jr = { name: 'Junior Tour', mu: 50, purse: 15000, fee: 0 };
@@ -157,8 +159,26 @@ export async function lesson(g: any, what: string, s: any) {
 export function golferRow(p: any, extra: any) {
   return { name: p.name, country: p.country, college: p.college || null, arch: p.arch || null, sk: p.sk, yr: p.yr || 1, tour: p.tour, best: E.ovr(p.sk), stats: { ev: 0, cuts: 0, wins: 0, top10: 0, earn: 0, rounds: 0, par: 0, low: null }, ...extra };
 }
+// every name already used in the world (lower-cased), so new computer golfers and coaches never share one
+export async function takenNames(): Promise<Set<string>> {
+  const t = new Set<string>();
+  for (let from = 0; ; from += 1000) {
+    const { data } = await sb.from('golfers').select('name').range(from, from + 999);
+    (data || []).forEach((r: any) => t.add(String(r.name).toLowerCase()));
+    if (!data || data.length < 1000) break;
+  }
+  return t;
+}
 export async function insertGolfers(rows: any[], secrets: any[]) {
   const out: any[] = [];
+  // computer golfers get a name nobody else has; a manager's own pick is kept as typed
+  if (rows.some((r) => !r.manager_id)) {
+    const taken = await takenNames();
+    for (const r of rows) {
+      const k = String(r.name).toLowerCase();
+      if (!r.manager_id && taken.has(k)) r.name = uniqueName(r.country, taken); else taken.add(k);
+    }
+  }
   for (let i = 0; i < rows.length; i += 400) {
     const { data, error } = await sb.from('golfers').insert(rows.slice(i, i + 400)).select('id');
     if (error) throw new Error('insert golfers: ' + error.message);
@@ -174,8 +194,8 @@ export const COLLEGE_TOUR = (_college?: string) => 'col0';
 export function marketProspect(tour: string, yr: number, mu: number, prodigyPct = 5) {
   let p = E.rollProspect(mu);
   while (p.arch === 'Prodigy' && Math.random() * 5 >= prodigyPct) p = E.rollProspect(mu);
-  const c = Math.random() < 0.34 ? 'US' : E.pick(E.CN), N = E.NAMES[c];
-  const name = E.pick(N[0]) + ' ' + E.pick(N[1]);
+  const c = Math.random() < 0.34 ? 'US' : E.pick(E.CN);
+  const name = uniqueName(c, new Set());
   const college = E.isCol(tour) ? E.pick(E.COLLEGES) : null;
   return { p, name, country: c, tour, yr, college };
 }
