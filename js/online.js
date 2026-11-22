@@ -11,7 +11,7 @@ function flag(c){
   if(c==='ENG'||c==='SCO')return String.fromCodePoint(0x1F3F4,...[...(c==='ENG'?'gbeng':'gbsct')].map(ch=>0xE0000+ch.charCodeAt(0)),0xE007F);
   return String.fromCodePoint(...[...c].map(ch=>0x1F1E6+ch.charCodeAt(0)-65));
 }
-const flagHTML=c=>`<span class="flag" title="${COUNTRIES[c]||c}">${flag(c||'US')}</span>`;
+const flagHTML=c=>{c=COUNTRIES[c]?c:'US';return `<span class="flag f-${c.toLowerCase()}" role="img" aria-label="${COUNTRIES[c]}" title="${COUNTRIES[c]}"></span>`;}; // a small picture (flags/xx.svg via a CSS class), not an emoji: emoji flags flickered as the web font swapped in and out
 const fmtPar=n=>n===0?'E':n>0?'+'+n:'−'+Math.abs(n);
 const fmt1=n=>(n>0?'+':n<0?'−':'')+Math.abs(n).toFixed(1);
 const fmtPts=n=>(Math.round(n*10)/10).toLocaleString();
