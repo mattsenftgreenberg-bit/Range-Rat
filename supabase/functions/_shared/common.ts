@@ -62,7 +62,7 @@ export const fmt$ = (n: number) => (n < 0 ? '-' : '') + '$' + Math.abs(Math.roun
 export async function addNews(mid: string, lines: string[]) {
   if (!lines.length) return;
   const { data } = await sb.from('managers').select('news').eq('id', mid).single();
-  const news = (lines.map((t) => ({ t, at: nowISO() }))).concat(data?.news || []).slice(0, 15);
+  const news = (lines.map((t) => ({ t, at: nowISO() }))).concat(data?.news || []).slice(0, 60);
   await sb.from('managers').update({ news }).eq('id', mid);
 }
 export async function cash(mid: string, amt: number, kind: string, note: string, allowNegative = true) {

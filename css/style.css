@@ -414,3 +414,38 @@ small.age{display:inline-block;margin-left:6px;font-size:.72em;font-weight:500;o
 .mpcard tr.mmem td{font-size:.78rem;color:var(--muted);padding-top:1px;padding-bottom:1px}
 .mpcard tr.mmem td:first-child{padding-left:1.1em;white-space:nowrap}
 .mpcard tr.mmem td.best{color:var(--ink);font-weight:700}
+
+/* season money: bonus ladder, the race, last season's results, college offers, the news feed */
+.money{color:var(--fill);font-variant-numeric:tabular-nums}
+.bladder{display:flex;flex-wrap:wrap;gap:6px;align-items:stretch;margin-top:10px}
+.bladder .bl-h{flex-basis:100%;font-family:var(--display);font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:.8rem;color:var(--muted)}
+.bladder .bl-s{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:4px;padding:5px 10px;background:var(--surface);min-width:0}
+.bladder .bl-s small{color:var(--muted);font-size:.75rem}
+.bladder .bl-s b{font-family:var(--display);font-size:1.15rem;color:var(--fill)}
+.race-h{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;justify-content:space-between}
+.race-h h2{margin:0}
+.race-t{color:var(--muted)} .race-t b{color:var(--fill);font-family:var(--display);font-size:1.2rem}
+.race,.recap{border-left:4px solid var(--fill);padding-left:12px}
+.recap.hero{border:2px solid var(--flag);border-radius:6px;padding:12px;background:var(--surface)}
+.recap .lstats{margin:10px 0}
+.recap-list{display:flex;flex-direction:column;gap:6px}
+.rc{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:4px;padding:8px;background:var(--surface)}
+.rc-place{display:flex;flex-direction:column;align-items:center;text-align:center}
+.rc-place b{font-family:var(--display);font-size:1.5rem;line-height:1}
+.rc-place span{font-size:.7rem;color:var(--muted);line-height:1.1}
+.rc-who{display:flex;flex-direction:column;min-width:0}
+.rc-pay{display:flex;flex-direction:column;align-items:flex-end;text-align:right;gap:4px}
+.rc-pay>div{display:flex;flex-direction:column;align-items:inherit}
+.rc-pay b{font-family:var(--display);font-size:1.15rem}
+.rc-pay span{font-size:.72rem;color:var(--muted)}
+.tbl tr.zup td:first-child{box-shadow:inset 3px 0 0 var(--fill)}
+.nilban .nb{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;border:2px solid var(--flag);border-radius:6px;padding:10px;background:var(--surface)}
+.nilban .nb+.nb{margin-top:8px}
+.nb-k{font-family:var(--display);font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--flag);color:var(--flag-ink);border-radius:3px;padding:3px 8px;font-size:.85rem}
+.nb-t{display:flex;flex-direction:column;min-width:0}
+@media (max-width:560px){.nilban .nb{grid-template-columns:minmax(0,1fr)}.rc{grid-template-columns:52px minmax(0,1fr)}.rc-pay{grid-column:2;align-items:flex-start;text-align:left;flex-direction:row;gap:14px;flex-wrap:wrap}}
+.nday h3{font-family:var(--display);text-transform:uppercase;letter-spacing:.06em;font-size:.95rem;color:var(--muted);margin:14px 0 6px;border-bottom:1px solid var(--line);padding-bottom:3px}
+.nitem{display:grid;grid-template-columns:86px minmax(0,1fr) auto;gap:8px;align-items:baseline;padding:4px 0}
+.nitem p{margin:0}
+.nitem .tag{text-align:center}
+@media (max-width:560px){.nitem{grid-template-columns:76px minmax(0,1fr)}.nitem>.muted{grid-column:2}}

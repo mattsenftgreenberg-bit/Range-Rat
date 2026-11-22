@@ -938,6 +938,7 @@ async function rollover(w: any, s: any, done: string[]) {
   // one collegiate tour now: fold any old college circuits into it
   await sb.from('standings').update({ tour: 'col0' }).in('tour', ['col1', 'col2']).eq('season', season);
   await sb.from('golfers').update({ tour: 'col0' }).in('tour', ['col1', 'col2']);
+  const bonusTot: Record<string, number> = {};
   for (const tour of TORDER) {
     const col = seasonal(tour), T = E.TOURS[tour];
     const { data: st } = await sb.from('standings').select('golfer_id,pts,wins,earn').eq('tour', tour).eq('season', season);
@@ -970,7 +971,7 @@ async function rollover(w: any, s: any, done: string[]) {
       const bonus = g.manager_id ? Math.round(T.purse * s.purse_mult * (rank === 1 ? 0.5 : rank <= 5 ? 0.2 : rank <= 10 ? 0.1 : top ? 0.04 : 0)) : 0;
       const trophies = g.trophies || [];
       if (rank === 1 && x.pts > 0) trophies.push({ s: season, n: T.name + ' season title', t: tour, title: true });
-      const seasons = (g.seasons || []).concat([{ s: y, gs: season, tour, rank, pts: x.pts, wins: x.wins, earn: x.earn + bonus }]);
+      const seasons = (g.seasons || []).concat([{ s: y, gs: season, tour, rank, pts: x.pts, wins: x.wins, earn: x.earn + bonus, bonus }]);
       if (!retire) { ageDecline(g.sk, y); if (!g.manager_id) naturalGrowth(g.sk, y); }
       const upd: any = { yr: y + 1, tour: next, seasons, trophies, sk: g.sk, s_pts: 0, conf: 0 };
       if (offers) { if (g.manager_id) Object.assign(upd, { college: null, offers: { list: offers, at: new Date().toISOString() } }); else upd.college = offers[0].college; }
@@ -982,6 +983,7 @@ async function rollover(w: any, s: any, done: string[]) {
       moves.push({ id: g.id, upd, from: tour });
       if (g.manager_id) {
         if (bonus) await cash(g.manager_id, bonus, 'bonus', `${g.name}: season bonus, ${T.name}`);
+        bonusTot[g.manager_id] = (bonusTot[g.manager_id] || 0) + bonus;
         say(g.manager_id, `${g.name} finished ${rank}${['th', 'st', 'nd', 'rd'][rank % 10 > 3 || [11, 12, 13].includes(rank % 100) ? 0 : rank % 10]} on the ${T.name}. ${note}${bonus ? ` Season bonus: ${fmt$(bonus)}.` : ''}`);
       }
     }
@@ -1012,6 +1014,8 @@ async function rollover(w: any, s: any, done: string[]) {
   await advanceBots(season, next);
   await sb.from('world').update({ season: next, season_start: start, season_end: end }).eq('id', 1);
   await scheduleSeason(s, next, start, end);
+  // a headline first, so the season's money is the top line of every manager's news
+  for (const mid in bonusTot) (news[mid] ??= []).unshift(`Season ${season} is over. ${bonusTot[mid] ? `Your golfers earned ${fmt$(bonusTot[mid])} in season bonuses.` : 'No season bonuses this time: they go to the top ' + ZONE + ' on each tour.'} Final places are on the News page.`);
   for (const mid in news) await addNews(mid, news[mid]);
   done.push(`season ${season} closed; season ${next} scheduled; ${botMoves.length} tour regulars moved on (${botMoves.filter((b) => b.retire).length} retired)`);
 }
