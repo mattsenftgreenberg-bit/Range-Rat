@@ -255,7 +255,7 @@ ${own.length||cown.length?`<section class="sec mine-list"><h2>Your listings</h2>
   <div class="rbars">${'smlx'.split('').map(u=>{const v=um(m.sk,u);return `<span class="rl">${UMB[u]}</span><span class="track"><i style="width:${clamp(v,0,100)}%;background:${barC(v)}"></i></span><b>${Math.round(v)}</b>`;}).join('')}</div>
   <div class="mprice"><b>${fmt$(m.ask)}</b><span class="tag${d<.93?' hot':''}">${d<.93?'Under value':d>1.1?'Over value':'Fair price'}</span></div>
   <div class="row" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn sm" data-act="player" data-v="${m.id}">Scouting report</button>${buyBtn(m,full,'Sign him')}</div></div>`;}).join('')}</div>
-<p class="muted small">${full?`Your roster is full at ${S().max_golfers} active golfers. `:''}Rival coaches buy listed golfers too, so the list changes day to day.</p></section>
+<p class="muted small">${full?`Your roster is full at ${S().max_golfers} active golfers. Golfers aged ${ageOf(S().coach_age_yr)} or older can still be bought with <b>Hire and retire</b>: they join your coaches instead. `:''}Rival coaches buy listed golfers too, so the list changes day to day.</p></section>
 <section class="sec"><h2>Coaches for sale</h2><p class="muted small">Retired players who coach. A coach doesn't take a roster place: he teaches your golfers for free and earns his lesson fee from other rosters. He'll never play again, so he costs less than a player.</p>
  ${cl.length?`<div class="cgrid">${cl.map(c=>{const o=c.cr.o||{s:0,m:0,l:0,x:0};return `<div class="ccard"><div class="chead"><b>${flagHTML(c.country)}${esc(c.name)}</b><span class="muted small">${c.manager_id?`Sold by ${esc(c.stable||'a manager')} <span class="tag">Manager</span>`:esc(c.stable||'Computer coach')}</span></div><div class="cbars">${[['s','Short'],['m','Irons'],['l','Long'],['x','Head']].map(([u,l])=>`<span>${l}</span><span class="track"><i style="width:${o[u]||0}%;background:${barC(o[u]||0)}"></i></span><b>${o[u]??'\u2013'}</b>`).join('')}</div><p class="small">Coaching overall <b>${Math.round(coOvrC(o))}</b>. Lesson fee ${fmt$(c.cr.price)}; ${c.cr.given||0} lessons given. Worth about ${fmt$(coachValC(o))}.</p><div class="cfoot"><b>${fmt$(c.ask)}</b>${buyBtn(c,false,'Hire him')}</div></div>`;}).join('')}</div>`:'<p class="muted">No coaches for sale right now. A computer coach comes up for sale most hours.</p>'}</section>`;},
 guide:()=>guideHTML(),
@@ -1336,9 +1336,11 @@ function mDraw(dt){const M=ui.ma,cv=document.getElementById('mcv');if(!cv||!M.h)
     if(M.balls[p].mem!==undefined&&br>u*.3){c.fillStyle='#10201a';c.font=`700 ${Math.round(br*1.25)}px system-ui,sans-serif`;c.textAlign='center';c.textBaseline='middle';c.fillText(String(M.balls[p].mem+1),bx,by-lift+br*.05);}}
   if(q&&q.sh.holed&&M.phase==='wait'&&M.w<1000){const hw=M.w/1000;c.strokeStyle=MPC[q.side];c.globalAlpha=1-hw;c.lineWidth=Math.max(2,u*.22);c.beginPath();c.arc(px,py,u*(.6+hw*3.2),0,6.3);c.stroke();c.globalAlpha=1;}}
 // Buying takes two taps: "Sign him", then a confirm button with the price on it.
-function buyBtn(m,full,label){const off=full||D.me.cash<m.ask||ui.busy;
+// buying asks twice. A golfer old enough to coach can also be bought onto the coaching staff ("hire and retire"), which needs no roster place.
+function buyBtn(m,full,label){const poor=D.me.cash<m.ask||ui.busy,off=full||poor,canRet=!m.cr&&!m.retired&&m.yr>=S().coach_age_yr;
   if(ui.buyAsk===m.id&&!off)return `<span class="buyask"><span>${m.cr?'Hire':'Sign'} ${esc(m.name)} for <b>${fmt$(m.ask)}</b>?</span><button class="btn sm primary" data-act="buyOk" data-v="${m.id}">Confirm buy</button><button class="btn sm" data-act="buyNo">Cancel</button></span>`;
-  return `<button class="btn sm primary" data-act="buy" data-v="${m.id}" ${off?'disabled':''}>${label}</button>`;}
+  if(ui.buyAsk==='R'+m.id&&!poor)return `<span class="buyask"><span>Buy ${esc(m.name)} for <b>${fmt$(m.ask)}</b> and retire him to coach? He won't play again: he joins your coaches, gives your golfers free lessons and earns fees from other rosters.</span><button class="btn sm primary" data-act="buyROk" data-v="${m.id}">Confirm hire and retire</button><button class="btn sm" data-act="buyNo">Cancel</button></span>`;
+  return `<button class="btn sm primary" data-act="buy" data-v="${m.id}" ${off?'disabled':''}${full?' title="Your roster is full"':''}>${label}</button>${full&&canRet?`<button class="btn sm" data-act="buyR" data-v="${m.id}" ${poor?'disabled':''} title="Roster full: buy him straight onto your coaching staff">Hire and retire</button>`:''}`;}
 /* ---------- the league: every manager's record and roster ---------- */
 async function loadLeague(){const {data}=await SB.rpc('league');ui.league=data||[];if(ui.view==='league'||ui.view==='mgr')render();}
 async function loadMgr(id){ui.mgrG=null;const {data}=await SB.from('golfers').select('*').eq('manager_id',id).order('created_at');ui.mgrG=data||[];if(!ui.league)await loadLeague();ui.mgr=(ui.league||[]).find(m=>m.id===id)||null;if(ui.view==='mgr')render();}
@@ -1446,6 +1448,8 @@ document.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');i
   if(a==='buy'){ui.buyAsk=v;return keepScroll(render);}
   if(a==='buyNo'){ui.buyAsk=null;return keepScroll(render);}
   if(a==='buyOk'){ui.buyAsk=null;return act('buy',{id:v});}
+  if(a==='buyR'){ui.buyAsk='R'+v;return keepScroll(render);}
+  if(a==='buyROk'){ui.buyAsk=null;return act('buy',{id:v,retire:true});}
   if(a==='retire'){ui.confirm=null;return act('retire',{id:g.id});}
   if(a==='fee')return act('fee',{id:g.id,price:+val('feeIn')});
   if(a==='rename')return act('rename',{name:val('stName')});

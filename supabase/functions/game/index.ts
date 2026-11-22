@@ -63,6 +63,16 @@ async function newScout(uid: string, rerolls: number) {
   return scoutView(p);
 }
 
+// online career year to age (the same rule the pages use)
+const ageOfYr = (y: number) => (y <= 7 ? 14 + y : y <= 23 ? Math.round(22 + (y - 8) * 1.8) : 26 + y);
+// a golfer of yours hangs up his spikes and becomes one of your coaches
+async function retireToCoach(g: any, s: any) {
+  const { data: sec } = await sb.from('golfer_secrets').select('co').eq('golfer_id', g.id).single();
+  const o = coachRatings(g, sec?.co || rawCo(g.id));
+  await sb.from('golfers').update({ retired: true, ret_age: 0, ask: null, listed_at: null, coach_id: null, orders: null,
+    cr: { price: fairPrice(o, fameOf(g)), left: s.lessons_per_day, earn: 0, given: 0, own: 0, last: null, o } }).eq('id', g.id);
+  return { ovr: Math.round(coOvr(o)) };
+}
 const A: Record<string, (c: any) => Promise<any>> = {
   // ---- your stable ----
   async join({ uid, b, s }) {
@@ -277,7 +287,7 @@ const A: Record<string, (c: any) => Promise<any>> = {
     return { msg: `${rival} takes ${g.name} for ${fmt$(price)}.` };
   },
   async buy({ uid, b, s }) {
-    const { data: g } = await sb.from('golfers').select('id,name,manager_id,ask,retired,cr').eq('id', b.id).maybeSingle();
+    const { data: g } = await sb.from('golfers').select('id,name,manager_id,ask,retired,cr,yr').eq('id', b.id).maybeSingle();
     if (!g?.ask) no("He's no longer for sale.");
     if (g.manager_id === uid) no("He's already yours.");
     // a coach: he doesn't take a place on the roster
@@ -289,7 +299,10 @@ const A: Record<string, (c: any) => Promise<any>> = {
       await addNews(uid, [`${g.name} now coaches for you: free lessons for your golfers, and fees from other rosters.`]);
       return { msg: `${g.name} coaches for you now.` };
     }
-    if ((await activeCount(uid)) >= s.max_golfers) no(`Your roster is full at ${s.max_golfers} active golfers.`);
+    // hire and retire: a golfer old enough to coach can be bought straight onto the coaching staff, so he needs no roster place
+    const toCoach = !!b.retire;
+    if (toCoach && g.yr < s.coach_age_yr) no(`He's too young to retire: golfers can coach from age ${ageOfYr(s.coach_age_yr)}.`);
+    if (!toCoach && (await activeCount(uid)) >= s.max_golfers) no(`Your roster is full at ${s.max_golfers} active golfers.`);
     const { data: ok, error } = await sb.rpc('transfer_golfer', { gid: g.id, buyer: uid, price: g.ask });
     if (error) no(error.message.includes('insufficient_funds') ? 'Not enough money in the bank for that.' : 'That sale fell through.');
     if (!ok) no('The price changed or he was sold. Have another look.');
@@ -298,6 +311,11 @@ const A: Record<string, (c: any) => Promise<any>> = {
     if (g.manager_id) {
       const { data: m } = await sb.from('managers').select('name').eq('id', uid).single();
       await addNews(g.manager_id, [`${m?.name || 'Another manager'} signed ${g.name} from you for ${fmt$(g.ask)}.`]);
+    }
+    if (toCoach) {
+      const r = await retireToCoach(await myGolfer(uid, g.id), s);
+      await addNews(uid, [`You bought ${g.name} for ${fmt$(g.ask)} and he retired straight away to coach for you (coaching overall ${r.ovr}).`]);
+      return { msg: `${g.name} signs for ${fmt$(g.ask)} and retires to coach. Coaching overall ${r.ovr}.` };
     }
     return { msg: `${g.name} signs for ${fmt$(g.ask)}.` };
   },
@@ -322,12 +340,9 @@ const A: Record<string, (c: any) => Promise<any>> = {
   // ---- retirement and coaching ----
   async retire({ uid, b, s }) {
     const g = await myGolfer(uid, b.id);
-    if (g.yr < s.coach_age_yr) no('He can retire to coach from age 40.');
-    const { data: sec } = await sb.from('golfer_secrets').select('co').eq('golfer_id', g.id).single();
-    const o = coachRatings(g, sec?.co || rawCo(g.id));
-    await sb.from('golfers').update({ retired: true, ret_age: 0, ask: null, listed_at: null, coach_id: null, orders: null,
-      cr: { price: fairPrice(o, fameOf(g)), left: s.lessons_per_day, earn: 0, given: 0, own: 0, last: null, o } }).eq('id', g.id);
-    return { msg: `${g.name} hangs up his spikes and opens a coaching practice. Coaching overall ${Math.round(coOvr(o))}.` };
+    if (g.yr < s.coach_age_yr) no(`He can retire to coach from age ${ageOfYr(s.coach_age_yr)}.`);
+    const r = await retireToCoach(g, s);
+    return { msg: `${g.name} hangs up his spikes and opens a coaching practice. Coaching overall ${r.ovr}.` };
   },
   async fee({ uid, b }) {
     const g = await myGolfer(uid, b.id, false);
