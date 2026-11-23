@@ -1374,7 +1374,7 @@ async function loadMyReport(id){ui.myRep={id,r:null};try{const r=await call('rep
 /* ---------- a golfer's full profile: for the market (with a scouting report) or anyone you click ---------- */
 const barC=v=>{v=Math.round(v);return v>=75?'var(--good)':v>=60?'var(--mid)':'var(--bad)';};
 async function loadPlayer(id){ui.pl=null;ui.rep=null;const {data}=await SB.from('golfers').select('*').eq('id',id).maybeSingle();ui.pl=data;
-  if(data&&!data.retired&&(data.ask||data.manager_id===D.user.id)){try{const r=await call('report',{id});ui.rep=r.report;}catch(e){ui.rep={err:e.message};}}
+  if(data&&!data.retired){try{const r=await call('report',{id});ui.rep=r.report;}catch(e){ui.rep={err:e.message};}}
   if(ui.view==='player')render();}
 function scoringAvg(s){return s&&s.rounds?s.par/s.rounds:null;}
 function playerHTML(){const g=ui.pl;const back=ui.from==='mgr'&&ui.mid?`<button class="btn sm" data-act="mgr" data-v="${ui.mid}">← ${esc((ui.mgr&&ui.mgr.name)||'Roster')}</button>`:`<button class="btn sm" data-act="go" data-v="${ui.from||'market'}">← ${{events:'Events',league:'League',standings:'Standings',news:'News',stable:'Roster'}[ui.from]||'Market'}</button>`;

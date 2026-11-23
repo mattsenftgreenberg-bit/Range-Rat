@@ -320,12 +320,11 @@ const A: Record<string, (c: any) => Promise<any>> = {
     return { msg: `${g.name} signs for ${fmt$(g.ask)}.` };
   },
 
-  // A scouting report on a golfer for sale (or one of yours): letter grades for his ceilings and how much room he has left.
+  // A scouting report on any active golfer: letter grades for his ceilings and how much room he has left.
   // The scouts aren't perfect, but the same scout gives the same answer about the same golfer.
   async report({ uid, b }) {
     const { data: g } = await sb.from('golfers').select('id,name,manager_id,ask,sk,retired').eq('id', b.id).maybeSingle();
     if (!g || g.retired) no('No report on him.');
-    if (!g.ask && g.manager_id !== uid) no('The scouts only report on golfers for sale.');
     const { data: sec } = await sb.from('golfer_secrets').select('ce').eq('golfer_id', g.id).single();
     const ce = sec!.ce, r = E.mulberry32(E.hash('report-' + g.id)), out: any = {};
     for (const u of 'smlx') {
